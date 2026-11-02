@@ -1710,8 +1710,21 @@ async def process_rating(callback: types.CallbackQuery):
     await callback.message.edit_text(t["rating_thanks"])
     await callback.answer()
 
+# --- ВЕБ-СЕРВЕР ДЛЯ УДЕРЖАНИЯ ПОРТА НА RENDER ---
+async def handle(request):
+    return web.Response(text="Yoldosh Bot is running!")
 
-# --- ЗАПУСК БОТА И ВЕБ-СЕРВЕРА (В САМОМ НИЗУ) ---
+async def start_background_web_server():
+    app = web.Application()
+    app.router.add_get("/", handle)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.environ.get("PORT", 8080))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+
+
+# --- ЗАПУСК БОТА ---
 
 bot_instance = None
 
@@ -1721,9 +1734,9 @@ async def main():
     
     await init_db()
     
-    # Запускаем фоновый веб-сервер для удержания порта 8080 на Render
+    # 🌐 Сначала запускаем веб-сервер, чтобы Render видел порт 8080
     await start_background_web_server()
-    print("🌐 Фоновый веб-сервер успешно запущен на порту!")
+    print("🌐 Фоновый веб-сервер успешно запущен!")
     
     print("🚀 Бот «Yo'ldosh Taxi» успешно запущен!")
     await dp.start_polling(bot_instance)
