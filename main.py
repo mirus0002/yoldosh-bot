@@ -2,7 +2,7 @@ import os
 import asyncio
 import logging
 import aiosqlite
-from aiohttp import web
+from aiohttp import web  # <--- Вот эту строчку добавь в самый верх к остальным импортам
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
