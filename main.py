@@ -2,7 +2,7 @@ import os
 import asyncio
 import logging
 import aiosqlite
-from aiohttp import web  # <--- Вот эту строчку добавь в самый верх к остальным импортам
+from aiohttp import web  # <--- ВОТ СЮДА ДОБАВЬ ЭТУ СТРОЧКУ
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -1740,6 +1740,32 @@ async def main():
     
     print("🚀 Бот «Yo'ldosh Taxi» успешно запущен!")
     await dp.start_polling(bot_instance)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+
+# === ДОБАВЬ ЭТО В САМЫЙ НИЗ ФАЙЛА ===
+
+async def handle(request):
+    return web.Response(text="Bot is alive!")
+
+async def start_web_server():
+    app = web.Application()
+    app.router.add_get("/", handle)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.environ.get("PORT", 8080))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+
+async def main():
+    # Запускаем и веб-сервер для UptimeRobot, и самого бота одновременно
+    asyncio.create_task(start_web_server())
+    
+    # Твоя инициализация базы и запуск поллинга
+    await init_db()
+    print("🚀 Бот «Yo'ldosh Taxi» успешно запущен!")
+    await dp.start_polling(bot)
 
 if __name__ == "__main__":
     asyncio.run(main())
