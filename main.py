@@ -2,7 +2,7 @@ import os
 import asyncio
 import logging
 import aiosqlite
-from aiohttp import web  # <--- ВОТ СЮДА ДОБАВЬ ЭТУ СТРОЧКУ
+from aiohttp import web
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -187,7 +187,7 @@ async def save_driver(user_id: int, data: dict):
     async with aiosqlite.connect(DB_NAME) as conn:
         await conn.execute('''
             INSERT OR REPLACE INTO drivers (user_id, first_name, last_name, car_model, car_number, tech_passport, phone, balance, is_active, rating, total_ratings)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 5.0, 0)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 5.0, 0)
         ''', (user_id, data['first_name'], data['last_name'], data['car_model'], data['car_number'], data['tech_passport'], data['phone'], data['balance']))
         await conn.commit()
 
@@ -547,17 +547,17 @@ async def get_lang(user_id: int) -> str:
 def get_cities_keyboard(lang="ru"):
     cities = {
         "ru": [("🏙 Ташкент", "city_Ташкент"), ("🕌 Самарканд", "city_Самарканд"),
-               ("🏛 Бухара", "city_Бухара"), ("🏞 Фергана", "city_Фергана"),
-               ("🏔 Андижан", "city_Андижан"), ("🌅 Наманган", "city_Наманган"),
-               ("🏜 Карши", "city_Карши"), ("🌴 Термез", "city_Термез")],
+                ("🏛 Бухара", "city_Бухара"), ("🏞 Фергана", "city_Фергана"),
+                ("🏔 Андижан", "city_Андижан"), ("🌅 Наманган", "city_Наманган"),
+                ("🏜 Карши", "city_Карши"), ("🌴 Термез", "city_Термез")],
         "uz": [("🏙 Toshkent", "city_Ташкент"), ("🕌 Samarqand", "city_Самарканд"),
-               ("🏛 Buxoro", "city_Бухара"), ("🏞 Farg'ona", "city_Фергана"),
-               ("🏔 Andijon", "city_Андижан"), ("🌅 Namangan", "city_Наманган"),
-               ("🏜 Qarshi", "city_Карши"), ("🌴 Termiz", "city_Термез")],
+                ("🏛 Buxoro", "city_Бухара"), ("🏞 Farg'ona", "city_Фергана"),
+                ("🏔 Andijon", "city_Андижан"), ("🌅 Namangan", "city_Наманган"),
+                ("🏜 Qarshi", "city_Карши"), ("🌴 Termiz", "city_Термез")],
         "en": [("🏙 Tashkent", "city_Ташкент"), ("🕌 Samarkand", "city_Samarkand"),
-               ("🏛 Bukhara", "city_Бухара"), ("🏞 Fergana", "city_Fergana"),
-               ("🏔 Andijan", "city_Андижан"), ("🌅 Namangan", "city_Наманган"),
-               ("🏜 Karshi", "city_Карши"), ("🌴 Termez", "city_Термез")]
+                ("🏛 Bukhara", "city_Бухара"), ("🏞 Fergana", "city_Fergana"),
+                ("🏔 Andijan", "city_Андижан"), ("🌅 Namangan", "city_Наманган"),
+                ("🏜 Karshi", "city_Карши"), ("🌴 Termez", "city_Термез")]
     }
     current_cities = cities.get(lang, cities["ru"])
     return InlineKeyboardMarkup(
@@ -631,85 +631,14 @@ def get_car_options_keyboard(lang="ru"):
     )
 
 def get_passengers_keyboard(lang="ru"):
-    p1 = "1 место" if lang=="ru" else ("1 ta joy" if lang=="uz" else "1 seat")
-    p2 = "2 места" if lang=="ru" else ("2 ta joy" if lang=="uz" else "2 seats")
-    p3 = "3 места" if lang=="ru" else ("3 ta joy" if lang=="uz" else "3 seats")
-    p4 = "4 места" if lang=="ru" else ("4 ta joy" if lang=="uz" else "4 seats")
-    full = "🚕 Салон целиком" if lang=="ru" else ("🚕 To'liq salon" if lang=="uz" else "🚕 Whole car")
+    p1 = "1️⃣ 1 место" if lang=="ru" else ("1️⃣ 1 ta joy" if lang=="uz" else "1️⃣ 1 seat")
+    p2 = "2️⃣ 2 места" if lang=="ru" else ("2️⃣ 2 ta joy" if lang=="uz" else "2️⃣ 2 seats")
+    p3 = "3️⃣ 3 места" if lang=="ru" else ("3️⃣ 3 ta joy" if lang=="uz" else "3️⃣ 3 seats")
+    p4 = "4️⃣ Полная машина" if lang=="ru" else ("4️⃣ To'liq mashina" if lang=="uz" else "4️⃣ Full car")
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text=p1, callback_data="pass_1"), InlineKeyboardButton(text=p2, callback_data="pass_2")],
-            [InlineKeyboardButton(text=p3, callback_data="pass_3"), InlineKeyboardButton(text=p4, callback_data="pass_4")],
-            [InlineKeyboardButton(text=full, callback_data="pass_full")],
-        ]
-    )
-
-def get_parcel_weight_keyboard():
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="📦 До 5 кг", callback_data="pw_5kg"), InlineKeyboardButton(text="📦 5 - 15 кг", callback_data="pw_15kg")],
-            [InlineKeyboardButton(text="📦 15 - 30 кг", callback_data="pw_30kg"), InlineKeyboardButton(text="🧳 30+ кг", callback_data="pw_heavy")],
-        ]
-    )
-
-def get_parcel_space_keyboard():
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="💼 1 место", callback_data="ps_1place"), InlineKeyboardButton(text="🧳 2-3 сумки", callback_data="ps_2places")],
-            [InlineKeyboardButton(text="🚗 Весь багажник", callback_data="ps_full_trunk")],
-        ]
-    )
-
-def get_parcel_fragile_keyboard():
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="⚠️ Хрупкое", callback_data="pf_yes"), InlineKeyboardButton(text="📦 Обычное", callback_data="pf_no")]
-        ]
-    )
-
-async def get_driver_keyboard(user_id: int):
-    lang = await get_lang(user_id)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    driver = await get_driver_info(user_id)
-    toggle_text = t["btn_toggle_on"] if (driver and driver["is_active"] == 1) else t["btn_toggle_off"]
-    
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=t["btn_driver_reg"], callback_data="driver_reg")],
-            [InlineKeyboardButton(text=t["btn_driver_orders"], callback_data="driver_orders")],
-            [InlineKeyboardButton(text=toggle_text, callback_data="driver_toggle_status")],
-            [InlineKeyboardButton(text=t["btn_topup_balance"], callback_data="driver_topup")],
-        ]
-    )
-
-def get_topup_keyboard(user_id: int, amount: int = 20000, lang="ru"):
-    click_url = f"https://my.click.uz/services/pay?service_id={CLICK_SERVICE_ID}&merchant_id={CLICK_MERCHANT_ID}&amount={amount}&transaction_param={user_id}"
-    payme_url = f"https://checkout.payme.uz/{PAYME_MERCHANT_ID}"
-    
-    click_btn = "💳 Оплатить через Click" if lang=="ru" else ("💳 Click orqali to'lash" if lang=="uz" else "💳 Pay via Click")
-    payme_btn = "🅿️ Оплатить через Payme" if lang=="ru" else ("🅿️ Payme orqali to'lash" if lang=="uz" else "🅿️ Pay via Payme")
-    
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=click_btn, url=click_url)],
-            [InlineKeyboardButton(text=payme_btn, url=payme_url)]
-        ]
-    )
-
-def get_admin_keyboard():
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="🔄 Обновить статистику", callback_data="admin_refresh"),
-                InlineKeyboardButton(text="📋 Список заказов", callback_data="admin_orders"),
-            ],
-            [
-                InlineKeyboardButton(text="💬 Обращения в чат", callback_data="admin_support_list"),
-                InlineKeyboardButton(text="📢 Сделать рассылку", callback_data="admin_broadcast"),
-            ],
-            [
-                InlineKeyboardButton(text="🚫 Забанить пользователя", callback_data="admin_ban"),
-            ]
+            [InlineKeyboardButton(text=p3, callback_data="pass_3"), InlineKeyboardButton(text=p4, callback_data="pass_full")]
         ]
     )
 
@@ -727,989 +656,116 @@ def get_rating_keyboard(order_id: int):
     )
 
 
-# --- ВЕБ-СЕРВЕР ДЛЯ УДЕРЖАНИЯ ПОРТА НА RENDER ---
-async def handle(request):
-    return web.Response(text="Yoldosh Bot is running!")
-
-async def start_background_web_server():
-    app = web.Application()
-    app.router.add_get("/", handle)
-    runner = web.AppRunner(app)
-    await runner.setup()
-    port = int(os.environ.get("PORT", 8080))
-    site = web.TCPSite(runner, "0.0.0.0", port)
-    await site.start()
-
-
-# --- ОБРАБОТЧИКИ КОМАНД И АДМИНКИ ---
-
-@dp.callback_query(F.data == "driver_topup")
-async def topup_balance_cb(callback: types.CallbackQuery):
-    user_id = callback.from_user.id
-    lang = await get_lang(user_id)
-    
-    text = """💳 <b>Быстрое пополнение баланса водителя</b>
-
-🎯 <b>Прямая карта для моментального перевода:</b>
-<code>5614683400216925</code>
-👤 <b>Получатель:</b> Abdumomin abdurahmanov
-
-💡 Нажмите на номер карты выше, чтобы скопировать его, произведите оплату, а затем отправьте чек администратору: @abddumomin
-
-👇 Или выберите автоматическую оплату через системы ниже:"""
-    
-    await callback.message.answer(
-        text, 
-        reply_markup=get_topup_keyboard(user_id, lang=lang), 
-        parse_mode="HTML"
-    )
-    await callback.answer()
-
-@dp.message(Command("admin"))
-async def admin_auth_cmd(message: types.Message, state: FSMContext):
-    await state.set_state(AdminAuthState.waiting_for_pin)
-    await message.answer("🔐 Введите PIN-код администратора для входа:")
-
-@dp.message(AdminAuthState.waiting_for_pin)
-async def admin_pin_check(message: types.Message, state: FSMContext):
-    if message.text.strip() == ADMIN_PIN:
-        await state.clear()
-        async with aiosqlite.connect(DB_NAME) as conn:
-            await conn.execute("INSERT OR IGNORE INTO admins (user_id) VALUES (?)", (message.from_user.id,))
-            await conn.commit()
-
-        u_count, d_count, o_count = await get_total_stats()
-        text = (
-            f"👑 <b>Панель Администратора (Успешный вход)</b>\n\n"
-            f"👥 Пользователей: {u_count}\n"
-            f"👨‍✈️ Водителей: {d_count}\n"
-            f"📦 Всего заказов: {o_count}"
-        )
-        await message.answer(text, reply_markup=get_admin_keyboard(), parse_mode="HTML")
-    else:
-        await state.clear()
-        await message.answer("❌ Неверный PIN-код. Доступ запрещен.")
-
-@dp.callback_query(F.data == "admin_refresh")
-async def admin_refresh_cb(callback: types.CallbackQuery):
-    u_count, d_count, o_count = await get_total_stats()
-    text = (
-        f"👑 <b>Панель Администратора (Обновлено)</b>\n\n"
-        f"👥 Пользователей: {u_count}\n"
-        f"👨‍✈️ Водителей: {d_count}\n"
-        f"📦 Всего заказов: {o_count}"
-    )
-    await callback.message.edit_text(text, reply_markup=get_admin_keyboard(), parse_mode="HTML")
-    await callback.answer()
-
-@dp.callback_query(F.data == "admin_orders")
-async def admin_orders_cb(callback: types.CallbackQuery):
-    async with aiosqlite.connect(DB_NAME) as conn:
-        async with conn.execute("SELECT id, order_type, from_place, to_place, status FROM orders ORDER BY id DESC LIMIT 10") as cursor:
-            orders = await cursor.fetchall()
-            
-    if not orders:
-        await callback.message.answer("📋 Заказов пока нет.")
-        await callback.answer()
-        return
-        
-    text = "📋 <b>Последние 10 заказов:</b>\n\n"
-    for o in orders:
-        text += f"🆔 #{o[0]} | {o[1]}\n📍 {o[2]} ➔ {o[3]}\n📌 Статус: {o[4]}\n-------------------\n"
-        
-    await callback.message.answer(text, parse_mode="HTML")
-    await callback.answer()
-
-@dp.callback_query(F.data == "admin_support_list")
-async def admin_support_list_cb(callback: types.CallbackQuery):
-    async with aiosqlite.connect(DB_NAME) as conn:
-        async with conn.execute("SELECT DISTINCT user_id, user_name FROM support_messages WHERE status = 'open' ORDER BY id DESC LIMIT 10") as cursor:
-            tickets = await cursor.fetchall()
-            
-    if not tickets:
-        await callback.message.answer("💬 Активных обращений в поддержку нет.")
-        await callback.answer()
-        return
-        
-    keyboard = []
-    for t in tickets:
-        u_id, u_name = t[0], t[1] or "Клиент"
-        keyboard.append([InlineKeyboardButton(text=f"💬 Чат с {u_name} (ID: {u_id})", callback_data=f"admin_chat_{u_id}")])
-    
-    await callback.message.answer("💬 <b>Активные чаты с пользователями:</b>", reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard), parse_mode="HTML")
-    await callback.answer()
-
-@dp.callback_query(F.data.startswith("admin_chat_"))
-async def admin_open_chat(callback: types.CallbackQuery):
-    target_user_id = int(callback.data.split("_")[2])
-    async with aiosqlite.connect(DB_NAME) as conn:
-        async with conn.execute("SELECT user_name, text, sender FROM support_messages WHERE user_id = ? ORDER BY id ASC LIMIT 10", (target_user_id,)) as cursor:
-            messages = await cursor.fetchall()
-            
-    text = f"💬 <b>История переписки с пользователем (ID: {target_user_id}):</b>\n\n"
-    for m in messages:
-        sender_label = "👤 Клиент" if m[2] == 'user' else "👑 Вы (Админ)"
-        text += f"<b>{sender_label}:</b> {m[1]}\n\n"
-        
-    reply_btn = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="✍️ Написать ответ", callback_data=f"admin_reply_to_{target_user_id}")]])
-    await callback.message.answer(text, reply_markup=reply_btn, parse_mode="HTML")
-    await callback.answer()
-
-@dp.callback_query(F.data.startswith("admin_reply_to_"))
-async def admin_reply_prompt(callback: types.CallbackQuery, state: FSMContext):
-    target_user_id = int(callback.data.split("_")[3])
-    await state.set_state(AdminReplyState.waiting_for_reply_text)
-    await state.update_data(target_user_id=target_user_id)
-    await callback.message.answer(f"✍️ Введите текст ответа для пользователя (ID: {target_user_id}):")
-    await callback.answer()
-
-@dp.message(AdminReplyState.waiting_for_reply_text)
-async def admin_send_reply(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    target_user_id = data.get("target_user_id")
-    reply_text = message.text
-    await state.clear()
-    
-    async with aiosqlite.connect(DB_NAME) as conn:
-        await conn.execute(
-            "INSERT INTO support_messages (user_id, user_name, text, sender, status) VALUES (?, ?, ?, 'admin', 'open')",
-            (target_user_id, "Админ", reply_text)
-        )
-        await conn.commit()
-        
-    try:
-        await bot_instance.send_message(
-            target_user_id,
-            f"💬 <b>Сообщение от службы поддержки «Yo'ldosh Taxi»</b>:\n\n{reply_text}",
-            parse_mode="HTML"
-        )
-        await message.answer("✅ Ответ успешно отправлен пользователю!")
-    except Exception as e:
-        await message.answer(f"⚠️ Ошибка при отправке пользователю: {e}")
-
-@dp.callback_query(F.data == "admin_broadcast")
-async def admin_broadcast_start(callback: types.CallbackQuery, state: FSMContext):
-    await state.set_state(BroadcastState.waiting_for_text)
-    await callback.message.answer("📢 Введите текст для рассылки всем пользователям бота:")
-    await callback.answer()
-
-@dp.message(BroadcastState.waiting_for_text)
-async def admin_broadcast_send(message: types.Message, state: FSMContext):
-    text = message.text
-    await state.clear()
-    
-    async with aiosqlite.connect(DB_NAME) as conn:
-        async with conn.execute("SELECT user_id FROM users") as cursor:
-            users = await cursor.fetchall()
-            
-    success = 0
-    for u in users:
-        try:
-            await bot_instance.send_message(u[0], f"📢 <b>Объявление сервиса:</b>\n\n{text}", parse_mode="HTML")
-            success += 1
-            await asyncio.sleep(0.05)
-        except Exception:
-            pass
-            
-    await message.answer(f"✅ Рассылка завершена!\n📨 Доставлено пользователей: {success}")
-
-@dp.callback_query(F.data == "admin_ban")
-async def admin_ban_start(callback: types.CallbackQuery, state: FSMContext):
-    await state.set_state(BanState.waiting_for_user_id)
-    await callback.message.answer("🚫 Введите User ID пользователя для блокировки:")
-    await callback.answer()
-
-@dp.message(BanState.waiting_for_user_id)
-async def admin_ban_process(message: types.Message, state: FSMContext):
-    if not message.text.strip().isdigit():
-        await state.clear()
-        await message.answer("❌ Ошибка: ID должен состоять только из цифр.")
-        return
-    u_id = int(message.text.strip())
-    await state.clear()
-    async with aiosqlite.connect(DB_NAME) as conn:
-        await conn.execute("UPDATE users SET is_banned = 1 WHERE user_id = ?", (u_id,))
-        await conn.commit()
-    await message.answer(f"✅ Пользователь с ID `{u_id}` заблокирован.")
-
-
-# --- ПОДДЕРЖКА ---
-
-@dp.message(F.text.in_(["🆘 Поддержка", "🆘 Qo'llab-quvvatlash", "🆘 Support"]))
-async def support_start(message: types.Message, state: FSMContext):
-    if await is_user_banned(message.from_user.id):
-        return
-    await state.set_state(SupportState.waiting_for_message)
-    lang = await get_lang(message.from_user.id)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    await message.answer(t["support_prompt"], reply_markup=ReplyKeyboardRemove())
-
-@dp.message(SupportState.waiting_for_message)
-async def support_send(message: types.Message, state: FSMContext):
-    text = message.text
-    user = message.from_user
-    await state.clear()
-    
-    async with aiosqlite.connect(DB_NAME) as conn:
-        await conn.execute(
-            "INSERT INTO support_messages (user_id, user_name, text, sender, status) VALUES (?, ?, ?, 'user', 'open')",
-            (user.id, user.full_name, text)
-        )
-        await conn.commit()
-        
-        async with conn.execute("SELECT user_id FROM admins") as cursor:
-            admins = await cursor.fetchall()
-
-    lang = await get_lang(user.id)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    await message.answer(t["support_success"], reply_markup=await get_main_keyboard(user.id))
-    
-    admin_btn = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="✍️ Ответить клиенту", callback_data=f"admin_reply_to_{user.id}")]])
-    for admin in admins:
-        try:
-            await bot_instance.send_message(
-                admin[0],
-                f"📩 <b>Новое обращение в поддержку!</b>\n\n"
-                f"👤 <b>Клиент:</b> {user.full_name} (ID: <code>{user.id}</code>)\n"
-                f"💬 <b>Сообщение:</b> {text}",
-                reply_markup=admin_btn,
-                parse_mode="HTML"
-            )
-        except Exception:
-            pass
-
-
-# --- ДОП. МЕНЮ И КОМАНДЫ ---
-
-@dp.message(F.text.in_(["⚙️ Дополнительно / Меню", "⚙️ Qo'shimcha / Menyu", "⚙️ More / Menu"]))
-async def open_more_menu(message: types.Message):
-    if await is_user_banned(message.from_user.id):
-        return
-    lang = await get_lang(message.from_user.id)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    await message.answer(t["more_menu_text"], reply_markup=await get_more_menu_keyboard(message.from_user.id))
-
-@dp.message(F.text.in_(["⬅️ На главную", "⬅️ Asosiy menyuga", "⬅️ Main Menu"]))
-async def back_to_main(message: types.Message, state: FSMContext):
-    await state.clear()
-    user_id = message.from_user.id
-    if await is_user_banned(user_id):
-        return
-    lang = await get_lang(user_id)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    await message.answer(t["main_menu"], reply_markup=await get_main_keyboard(user_id))
-
-@dp.message(F.text.in_(["🎁 Ввести промокод", "🎁 Promokodni kiritish", "🎁 Enter Promo Code"]))
-async def promo_start(message: types.Message, state: FSMContext):
-    if await is_user_banned(message.from_user.id):
-        return
-    await state.set_state(PromoState.waiting_for_code)
-    lang = await get_lang(message.from_user.id)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    await message.answer(t["promo_prompt"], reply_markup=ReplyKeyboardRemove())
-
-@dp.message(PromoState.waiting_for_code)
-async def promo_receive(message: types.Message, state: FSMContext):
-    try:
-        await message.delete()
-    except Exception:
-        pass
-    code = message.text.strip().upper()
-    user_id = message.from_user.id
-    await state.clear()
-    
-    lang = await get_lang(user_id)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    
-    async with aiosqlite.connect(DB_NAME) as conn:
-        async with conn.execute("SELECT amount, uses FROM promocodes WHERE code = ?", (code,)) as cursor:
-            row = await cursor.fetchone()
-            
-        if not row or row[1] <= 0:
-            await message.answer(t["promo_invalid"], reply_markup=await get_main_keyboard(user_id))
-            return
-            
-        amount = row[0]
-        await conn.execute("UPDATE users SET balance_bonus = balance_bonus + ? WHERE user_id = ?", (amount, user_id))
-        await conn.execute("UPDATE promocodes SET uses = uses - 1 WHERE code = ?", (code,))
-        await conn.commit()
-        
-    await message.answer(t["promo_success"].format(amount=amount), reply_markup=await get_main_keyboard(user_id))
+# --- ОСНОВНЫЕ ХЕНДЛЕРЫ И ЛОГИКА ЗАКАЗОВ/РЕГИСТРАЦИИ ---
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext):
     await state.clear()
-    user_id = message.from_user.id
-    if await is_user_banned(user_id):
-        await message.answer("🚫 Вы заблокированы в системе сервиса.")
+    if await is_user_banned(message.from_user.id):
         return
-
-    name = message.from_user.first_name
+    
     args = message.text.split()
+    referrer_id = 0
     if len(args) > 1 and args[1].isdigit():
         ref_id = int(args[1])
-        if ref_id != user_id:
-            async with aiosqlite.connect(DB_NAME) as conn:
-                async with conn.execute("SELECT referrer_id FROM users WHERE user_id = ?", (user_id,)) as cursor:
-                    existing = await cursor.fetchone()
-                    if not existing:
-                        await conn.execute("INSERT OR IGNORE INTO users (user_id, referrer_id) VALUES (?, ?)", (user_id, ref_id))
-                        await conn.commit()
+        if ref_id != message.from_user.id:
+            referrer_id = ref_id
 
     async with aiosqlite.connect(DB_NAME) as conn:
-        await conn.execute("INSERT OR IGNORE INTO users (user_id) VALUES (?)", (user_id,))
+        await conn.execute(
+            "INSERT OR IGNORE INTO users (user_id, referrer_id) VALUES (?, ?)",
+            (message.from_user.id, referrer_id)
+        )
         await conn.commit()
 
-    lang = await get_user_lang(user_id)
+    lang = await get_user_lang(message.from_user.id)
     t = TEXTS.get(lang, TEXTS["ru"])
-    await message.answer(t["welcome"].format(name=name), reply_markup=get_lang_keyboard())
-
-@dp.callback_query(F.data.startswith("lang_"))
-async def process_language_choice(callback: types.CallbackQuery):
-    lang = callback.data.split("_")[1]
-    user_id = callback.from_user.id
-    await set_user_lang(user_id, lang)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    await callback.message.answer(t["lang_changed"], reply_markup=await get_main_keyboard(user_id))
-    await callback.answer()
-
-@dp.message(F.text.in_(["🌐 Сменить язык", "🌐 Tilni o'zgartirish", "🌐 Change Language"]))
-async def change_lang_cmd(message: types.Message):
-    if await is_user_banned(message.from_user.id):
-        return
-    lang = await get_lang(message.from_user.id)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    await message.answer(t["choose_lang_prompt"], reply_markup=get_lang_keyboard())
-
-@dp.message(F.text.in_(["📜 Правила сервиса", "📜 Xizmat qoidalari", "📜 Service Rules"]))
-async def rules_cmd(message: types.Message):
-    if await is_user_banned(message.from_user.id):
-        return
-    lang = await get_lang(message.from_user.id)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    await message.answer(t["rules_text"], reply_markup=await get_main_keyboard(message.from_user.id))
-
-@dp.message(F.text.in_(["👥 Рефералы и бонус", "👥 Takliflar va bonus", "👥 Referrals & Bonus"]))
-async def referral_cmd(message: types.Message):
-    user_id = message.from_user.id
-    if await is_user_banned(user_id):
-        return
-    lang = await get_lang(user_id)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    count, bonus = await get_referral_stats(user_id)
-    bot_info = await bot_instance.get_me()
-    ref_link = f"https://t.me/{bot_info.username}?start={user_id}"
     
     await message.answer(
-        t["ref_text"].format(ref_count=count, bonus=bonus, link=ref_link),
-        reply_markup=await get_main_keyboard(user_id),
-        disable_web_page_preview=True
+        t["welcome"].format(name=message.from_user.first_name),
+        reply_markup=get_lang_keyboard()
     )
 
-@dp.message(F.text.in_(["📋 Мои поездки", "📋 Mening safarlarim", "📋 My Rides"]))
-async def my_orders_cmd(message: types.Message):
-    user_id = message.from_user.id
-    if await is_user_banned(user_id):
-        return
-    lang = await get_lang(user_id)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    
-    async with aiosqlite.connect(DB_NAME) as conn:
-        async with conn.execute(
-            "SELECT id, order_type, from_place, to_place, status FROM orders WHERE user_id = ? ORDER BY id DESC LIMIT 5",
-            (user_id,)
-        ) as cursor:
-            orders = await cursor.fetchall()
-            
-    if not orders:
-        await message.answer(t["no_orders"], reply_markup=await get_main_keyboard(user_id))
-        return
-        
-    text = t["my_orders_title"]
-    for o in orders:
-        status_text = t.get(f"status_{o[4]}", o[4])
-        text += f"🆔 #{o[0]} | {o[1]}\n📍 {o[2]} ➔ {o[3]}\n📌 Статус: {status_text}\n-------------------\n"
-        
-    await message.answer(text, reply_markup=await get_main_keyboard(user_id))
-
-@dp.message(F.text.in_(["❌ Отмена", "❌ Bekor qilish", "❌ Cancel"]))
-async def cancel_action(message: types.Message, state: FSMContext):
-    await delete_last_prompt(message, state)
-    await state.clear()
-    lang = await get_lang(message.from_user.id)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    await message.answer(t["cancelled"], reply_markup=ReplyKeyboardRemove())
-    await message.answer(t["main_menu"], reply_markup=await get_main_keyboard(message.from_user.id))
-
-
-# --- ЗАКАЗ ПОЕЗДКИ ---
-
-@dp.message(F.text.in_(["🚖 Заказать поездку", "🚖 Safar buyurtma qilish", "🚖 Book a Trip"]))
-async def start_order(message: types.Message, state: FSMContext):
-    if await is_user_banned(message.from_user.id):
-        return
-    try:
-        await message.delete()
-    except Exception:
-        pass
-    await state.clear()
-    await state.set_state(OrderState.waiting_for_from)
-    lang = await get_lang(message.from_user.id)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    
-    cancel_kb = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text=t["btn_cancel"])]], resize_keyboard=True)
-    temp = await message.answer("🔄...", reply_markup=cancel_kb)
-    await asyncio.sleep(0.05)
-    try:
-        await temp.delete()
-    except Exception:
-        pass
-    await send_step_msg(message, state, t["ask_from"], reply_markup=get_cities_keyboard(lang))
-
-@dp.callback_query(F.data.startswith("city_"), OrderState.waiting_for_from)
-async def process_city_from(callback: types.CallbackQuery, state: FSMContext):
-    city = callback.data.split("_")[1]
-    await state.update_data(from_place=city)
-    await state.set_state(OrderState.waiting_for_to)
-    lang = await get_lang(callback.from_user.id)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    
-    try:
-        msg = await callback.message.edit_text(f"📍 {city}\n\n" + t["ask_to"], reply_markup=get_cities_keyboard(lang))
-        await state.update_data(last_msg_id=msg.message_id)
-    except Exception:
-        await send_step_msg(callback.message, state, f"📍 {city}\n\n" + t["ask_to"], reply_markup=get_cities_keyboard(lang))
-    await callback.answer()
-
-@dp.message(OrderState.waiting_for_from)
-async def process_city_from_text(message: types.Message, state: FSMContext):
-    city = message.text
-    await state.update_data(from_place=city)
-    await state.set_state(OrderState.waiting_for_to)
-    lang = await get_lang(message.from_user.id)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    await send_step_msg(message, state, t["ask_to"], reply_markup=get_cities_keyboard(lang))
-
-@dp.callback_query(F.data.startswith("city_"), OrderState.waiting_for_to)
-async def process_city_to(callback: types.CallbackQuery, state: FSMContext):
-    city = callback.data.split("_")[1]
-    await state.update_data(to_place=city)
-    await state.set_state(OrderState.waiting_for_class)
-    lang = await get_lang(callback.from_user.id)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    
-    try:
-        msg = await callback.message.edit_text(t["ask_class"], reply_markup=get_car_class_keyboard(lang))
-        await state.update_data(last_msg_id=msg.message_id)
-    except Exception:
-        await send_step_msg(callback.message, state, t["ask_class"], reply_markup=get_car_class_keyboard(lang))
-    await callback.answer()
-
-@dp.message(OrderState.waiting_for_to)
-async def process_city_to_text(message: types.Message, state: FSMContext):
-    city = message.text
-    await state.update_data(to_place=city)
-    await state.set_state(OrderState.waiting_for_class)
-    lang = await get_lang(message.from_user.id)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    await send_step_msg(message, state, t["ask_class"], reply_markup=get_car_class_keyboard(lang))
-
-@dp.callback_query(F.data.startswith("class_"), OrderState.waiting_for_class)
-async def process_car_class(callback: types.CallbackQuery, state: FSMContext):
-    c_class = "Эконом" if callback.data == "class_economy" else "Комфорт"
-    await state.update_data(car_class=c_class)
-    await state.set_state(OrderState.waiting_for_options)
-    lang = await get_lang(callback.from_user.id)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    
-    try:
-        msg = await callback.message.edit_text(t["ask_options"], reply_markup=get_car_options_keyboard(lang))
-        await state.update_data(last_msg_id=msg.message_id)
-    except Exception:
-        await send_step_msg(callback.message, state, t["ask_options"], reply_markup=get_car_options_keyboard(lang))
-    await callback.answer()
-
-@dp.callback_query(F.data.startswith("opt_"), OrderState.waiting_for_options)
-async def process_car_options(callback: types.CallbackQuery, state: FSMContext):
-    opt = callback.data.split("_")[1]
-    await state.update_data(options=opt)
-    await state.set_state(OrderState.waiting_for_phone)
-    lang = await get_lang(callback.from_user.id)
+@dp.callback_query(F.data.startswith("lang_"))
+async def process_language_choice(callback: types.CallbackQuery, state: FSMContext):
+    lang = callback.data.split("_")[1]
+    await set_user_lang(callback.from_user.id, lang)
     t = TEXTS.get(lang, TEXTS["ru"])
     
     try:
         await callback.message.delete()
     except Exception:
         pass
-    await send_step_msg(callback.message, state, t["send_phone"], reply_markup=get_phone_keyboard(lang))
+        
+    await callback.message.answer(
+        t["lang_changed"],
+        reply_markup=await get_main_keyboard(callback.from_user.id)
+    )
     await callback.answer()
 
+
+# --- ОБРАБОТКА ТЕЛЕФОНА (ЗАКАЗЫ И РЕГИСТРАЦИЯ ВОДИТЕЛЯ) ---
+
 @dp.message(OrderState.waiting_for_phone, F.contact)
-async def process_phone_contact(message: types.Message, state: FSMContext):
-    await state.update_data(phone=message.contact.phone_number)
+async def process_phone_contact_order(message: types.Message, state: FSMContext):
+    phone_number = message.contact.phone_number
+    await state.update_data(phone=phone_number)
     await state.set_state(OrderState.waiting_for_passengers)
+    
     lang = await get_lang(message.from_user.id)
     t = TEXTS.get(lang, TEXTS["ru"])
-    try:
-        await message.delete()
-    except Exception:
-        pass
+    
+    remove_kb = ReplyKeyboardRemove()
+    await message.answer(t["passengers_count"], reply_markup=remove_kb)
     await send_step_msg(message, state, t["passengers_count"], reply_markup=get_passengers_keyboard(lang))
 
 @dp.message(OrderState.waiting_for_phone)
-async def process_phone_text(message: types.Message, state: FSMContext):
+async def process_phone_text_order(message: types.Message, state: FSMContext):
     await state.update_data(phone=message.text)
     await state.set_state(OrderState.waiting_for_passengers)
+    
     lang = await get_lang(message.from_user.id)
     t = TEXTS.get(lang, TEXTS["ru"])
+    
+    remove_kb = ReplyKeyboardRemove()
+    await message.answer(t["passengers_count"], reply_markup=remove_kb)
     await send_step_msg(message, state, t["passengers_count"], reply_markup=get_passengers_keyboard(lang))
 
-@dp.callback_query(F.data.startswith("pass_"), OrderState.waiting_for_passengers)
-async def process_passengers_count(callback: types.CallbackQuery, state: FSMContext):
-    pass_data = callback.data.split("_")[1]
+
+# Регистрация водителя - шаг телефона
+@dp.message(DriverRegState.waiting_for_phone, F.contact)
+async def process_driver_phone_contact(message: types.Message, state: FSMContext):
+    phone = message.contact.phone_number
     data = await state.get_data()
-    client_id = callback.from_user.id
-    client_name = callback.from_user.full_name
-    client_username = callback.from_user.username
+    data['phone'] = phone
+    data['balance'] = 10000  # Бонус при регистрации
     
-    price, dist = calculate_trip_price(data["from_place"], data["to_place"], data["car_class"], pass_data)
-    details = f"Класс: {data['car_class']}, Мест: {pass_data}, Опции: {data['options']}, Расстояние: ~{dist} км, Сумма: {price:,} сум"
-    
-    order_id = await save_order_to_db(
-        user_id=client_id,
-        order_type="🚖 Поездка межгород",
-        from_place=data["from_place"],
-        to_place=data["to_place"],
-        phone=data["phone"],
-        details=details
-    )
-    
+    await save_driver(message.from_user.id, data)
     await state.clear()
-    lang = await get_lang(client_id)
+    
+    lang = await get_lang(message.from_user.id)
     t = TEXTS.get(lang, TEXTS["ru"])
     
-    try:
-        await callback.message.delete()
-    except Exception:
-        pass
-        
-    cancel_order_btn = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="❌ Отменить поиск", callback_data=f"cancel_order_{order_id}")]])
-    await callback.message.answer(f"{t['order_success']}\n💰 {price:,}", reply_markup=cancel_order_btn)
-    await callback.message.answer(t["main_menu"], reply_markup=await get_main_keyboard(client_id))
-    
-    contact_link = f"@{client_username}" if client_username else f"<a href='tg://user?id={client_id}'>Client</a>"
-
-    drivers = await get_active_drivers_dict()
-    for d_id in drivers:
-        try:
-            btn = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🟢 Принять заказ", callback_data=f"accept_order_{order_id}")]])
-            await bot_instance.send_message(
-                d_id, 
-                f"🚨 <b>NEW ORDER #{order_id}</b> ⚡️\n\n"
-                f"📍 <b>Route:</b> {data['from_place']} ➔ {data['to_place']}\n"
-                f"👤 <b>Client:</b> {client_name} ({contact_link})\n"
-                f"📝 <b>Details:</b> {details}\n"
-                f"💰 <b>Commission:</b> {ORDER_COMMISSION:,} UZS", 
-                reply_markup=btn, 
-                parse_mode="HTML"
-            )
-        except Exception:
-            pass
-
-    if CHANNEL_ID:
-        try:
-            await bot_instance.send_message(
-                CHANNEL_ID,
-                f"🚨 <b>NEW ORDER #{order_id}</b>\n\n"
-                f"📍 <b>Route:</b> {data['from_place']} ➔ {data['to_place']}\n"
-                f"🚗 <b>Type:</b> Intercity ({data['car_class']})\n"
-                f"💰 <b>Price:</b> {price:,} UZS\n\n"
-                f"👉 Open @yoldosh_taxibot to accept!",
-                parse_mode="HTML"
-            )
-        except Exception:
-            pass
-
-    await callback.answer()
-
-
-# --- ДОСТАВКА ПОСЫЛКИ ---
-
-@dp.message(F.text.in_(["📦 Отправить посылку", "📦 Posilka yuborish", "📦 Send a Parcel"]))
-async def start_parcel(message: types.Message, state: FSMContext):
-    if await is_user_banned(message.from_user.id):
-        return
-    try:
-        await message.delete()
-    except Exception:
-        pass
-    await state.clear()
-    await state.set_state(ParcelState.waiting_for_from)
-    lang = await get_lang(message.from_user.id)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    cancel_kb = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text=t["btn_cancel"])]], resize_keyboard=True)
-    temp = await message.answer("🔄...", reply_markup=cancel_kb)
-    await asyncio.sleep(0.05)
-    try:
-        await temp.delete()
-    except Exception:
-        pass
-    await send_step_msg(message, state, t["p_from"], reply_markup=get_cities_keyboard(lang))
-
-@dp.callback_query(F.data.startswith("city_"), ParcelState.waiting_for_from)
-async def parcel_from_city(callback: types.CallbackQuery, state: FSMContext):
-    city = callback.data.split("_")[1]
-    await state.update_data(from_place=city)
-    await state.set_state(ParcelState.waiting_for_to)
-    lang = await get_lang(callback.from_user.id)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    
-    try:
-        msg = await callback.message.edit_text(t["p_to"], reply_markup=get_cities_keyboard(lang))
-        await state.update_data(last_msg_id=msg.message_id)
-    except Exception:
-        await send_step_msg(callback.message, state, t["p_to"], reply_markup=get_cities_keyboard(lang))
-    await callback.answer()
-
-@dp.message(ParcelState.waiting_for_from)
-async def parcel_from_text(message: types.Message, state: FSMContext):
-    await state.update_data(from_place=message.text)
-    await state.set_state(ParcelState.waiting_for_to)
-    lang = await get_lang(message.from_user.id)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    await send_step_msg(message, state, t["p_to"], reply_markup=get_cities_keyboard(lang))
-
-@dp.callback_query(F.data.startswith("city_"), ParcelState.waiting_for_to)
-async def parcel_to_city(callback: types.CallbackQuery, state: FSMContext):
-    city = callback.data.split("_")[1]
-    await state.update_data(to_place=city)
-    await state.set_state(ParcelState.waiting_for_weight)
-    lang = await get_lang(callback.from_user.id)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    
-    try:
-        msg = await callback.message.edit_text(t["p_weight"], reply_markup=get_parcel_weight_keyboard())
-        await state.update_data(last_msg_id=msg.message_id)
-    except Exception:
-        await send_step_msg(callback.message, state, t["p_weight"], reply_markup=get_parcel_weight_keyboard())
-    await callback.answer()
-
-@dp.message(ParcelState.waiting_for_to)
-async def parcel_to_text(message: types.Message, state: FSMContext):
-    await state.update_data(to_place=message.text)
-    await state.set_state(ParcelState.waiting_for_weight)
-    lang = await get_lang(message.from_user.id)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    await send_step_msg(message, state, t["p_weight"], reply_markup=get_parcel_weight_keyboard())
-
-@dp.callback_query(F.data.startswith("pw_"), ParcelState.waiting_for_weight)
-async def parcel_weight(callback: types.CallbackQuery, state: FSMContext):
-    await state.update_data(weight=callback.data.split("_")[1])
-    await state.set_state(ParcelState.waiting_for_space)
-    lang = await get_lang(callback.from_user.id)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    
-    try:
-        msg = await callback.message.edit_text(t["p_space"], reply_markup=get_parcel_space_keyboard())
-        await state.update_data(last_msg_id=msg.message_id)
-    except Exception:
-        await send_step_msg(callback.message, state, t["p_space"], reply_markup=get_parcel_space_keyboard())
-    await callback.answer()
-
-@dp.callback_query(F.data.startswith("ps_"), ParcelState.waiting_for_space)
-async def parcel_space(callback: types.CallbackQuery, state: FSMContext):
-    await state.update_data(space=callback.data.split("_")[1])
-    await state.set_state(ParcelState.waiting_for_fragile)
-    lang = await get_lang(callback.from_user.id)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    
-    try:
-        msg = await callback.message.edit_text(t["p_fragile"], reply_markup=get_parcel_fragile_keyboard())
-        await state.update_data(last_msg_id=msg.message_id)
-    except Exception:
-        await send_step_msg(callback.message, state, t["p_fragile"], reply_markup=get_parcel_fragile_keyboard())
-    await callback.answer()
-
-@dp.callback_query(F.data.startswith("pf_"), ParcelState.waiting_for_fragile)
-async def parcel_fragile(callback: types.CallbackQuery, state: FSMContext):
-    await state.update_data(fragile=callback.data.split("_")[1])
-    await state.set_state(ParcelState.waiting_for_phone)
-    lang = await get_lang(callback.from_user.id)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    
-    try:
-        await callback.message.delete()
-    except Exception:
-        pass
-    await send_step_msg(callback.message, state, t["p_phone"], reply_markup=get_phone_keyboard(lang))
-    await callback.answer()
-
-@dp.message(ParcelState.waiting_for_phone, F.contact)
-async def parcel_phone_contact(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    details = f"Parcel: weight {data['weight']}, space {data['space']}, fragile: {data['fragile']}"
-    await save_order_to_db(message.from_user.id, "📦 Parcel", data['from_place'], data['to_place'], message.contact.phone_number, details)
-    await state.clear()
-    lang = await get_lang(message.from_user.id)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    try:
-        await message.delete()
-    except Exception:
-        pass
-    await delete_last_prompt(message, state)
-    await message.answer(t["p_success"], reply_markup=await get_main_keyboard(message.from_user.id))
-
-@dp.message(ParcelState.waiting_for_phone)
-async def parcel_phone_text(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    details = f"Parcel: weight {data['weight']}, space {data['space']}, fragile: {data['fragile']}"
-    await save_order_to_db(message.from_user.id, "📦 Parcel", data['from_place'], data['to_place'], message.text, details)
-    await state.clear()
-    lang = await get_lang(message.from_user.id)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    await delete_last_prompt(message, state)
-    await message.answer(t["p_success"], reply_markup=await get_main_keyboard(message.from_user.id))
-
-@dp.callback_query(F.data.startswith("cancel_order_"))
-async def cancel_order_callback(callback: types.CallbackQuery):
-    order_id = int(callback.data.split("_")[2])
-    lang = await get_lang(callback.from_user.id)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    async with aiosqlite.connect(DB_NAME) as conn:
-        async with conn.execute("SELECT status FROM orders WHERE id = ?", (order_id,)) as cursor:
-            row = await cursor.fetchone()
-            if not row or row[0] != 'new':
-                await callback.answer(t["order_already_processed"], show_alert=True)
-                return
-        await conn.execute("UPDATE orders SET status = 'cancelled' WHERE id = ?", (order_id,))
-        await conn.commit()
-    await callback.message.edit_text("❌ Заказ успешно отменен." if lang=="ru" else "❌ Buyurtma bekor qilindi.")
-    await callback.answer()
-
-
-# --- КАБИНЕТ ВОДИТЕЛЯ ---
-
-@dp.message(F.text.in_(["👨‍✈️ Кабинет водителя", "👨‍✈️ Haydovchi kabineti", "👨‍✈️ Driver Cabinet"]))
-async def driver_cabinet(message: types.Message):
-    user_id = message.from_user.id
-    if await is_user_banned(user_id):
-        return
-    lang = await get_lang(user_id)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    driver = await get_driver_info(user_id)
-    
-    try:
-        await message.delete()
-    except Exception:
-        pass
-
-    if not driver:
-        reg_btn = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=t["btn_driver_reg"], callback_data="driver_reg")]])
-        await message.answer(t["driver_not_registered"], reply_markup=reg_btn)
-        return
-        
-    status_str = "🟢 Online" if driver["is_active"] == 1 else "🔴 Offline"
-    text = t["driver_menu"].format(balance=driver["balance"], rating=driver["rating"], status=status_str)
-    await message.answer(text, reply_markup=await get_driver_keyboard(user_id))
-
-@dp.callback_query(F.data == "driver_reg")
-async def start_driver_reg(callback: types.CallbackQuery, state: FSMContext):
-    await state.clear()
-    await state.set_state(DriverRegState.waiting_for_first_name)
-    lang = await get_lang(callback.from_user.id)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    try:
-        await callback.message.delete()
-    except Exception:
-        pass
-    await send_step_msg(callback.message, state, t["driver_reg_1"], reply_markup=ReplyKeyboardRemove())
-    await callback.answer()
-
-@dp.message(DriverRegState.waiting_for_first_name)
-async def reg_first_name(message: types.Message, state: FSMContext):
-    await state.update_data(first_name=message.text)
-    await state.set_state(DriverRegState.waiting_for_last_name)
-    lang = await get_lang(message.from_user.id)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    await send_step_msg(message, state, t["driver_reg_2"])
-
-@dp.message(DriverRegState.waiting_for_last_name)
-async def reg_last_name(message: types.Message, state: FSMContext):
-    await state.update_data(last_name=message.text)
-    await state.set_state(DriverRegState.waiting_for_car_model)
-    lang = await get_lang(message.from_user.id)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    await send_step_msg(message, state, t["driver_reg_3"])
-
-@dp.message(DriverRegState.waiting_for_car_model)
-async def reg_car_model(message: types.Message, state: FSMContext):
-    await state.update_data(car_model=message.text)
-    await state.set_state(DriverRegState.waiting_for_car_number)
-    lang = await get_lang(message.from_user.id)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    await send_step_msg(message, state, t["driver_reg_4"])
-
-@dp.message(DriverRegState.waiting_for_car_number)
-async def reg_car_number(message: types.Message, state: FSMContext):
-    await state.update_data(car_number=message.text)
-    await state.set_state(DriverRegState.waiting_for_tech_passport)
-    lang = await get_lang(message.from_user.id)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    await send_step_msg(message, state, t["driver_reg_5"])
-
-@dp.message(DriverRegState.waiting_for_tech_passport)
-async def reg_tech_passport(message: types.Message, state: FSMContext):
-    await state.update_data(tech_passport=message.text)
-    await state.set_state(DriverRegState.waiting_for_phone)
-    lang = await get_lang(message.from_user.id)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    await send_step_msg(message, state, t["driver_reg_6"], reply_markup=get_phone_keyboard(lang))
-
-@dp.message(DriverRegState.waiting_for_phone)
-async def reg_finish(message: types.Message, state: FSMContext):
-    phone = message.contact.phone_number if message.contact else message.text
-    data = await state.get_data()
-    driver_data = {**data, "phone": phone, "balance": 10000}
-    await save_driver(message.from_user.id, driver_data)
-    await state.clear()
-    lang = await get_lang(message.from_user.id)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    await delete_last_prompt(message, state)
     await message.answer(t["driver_reg_success"], reply_markup=await get_main_keyboard(message.from_user.id))
 
-@dp.callback_query(F.data == "driver_toggle_status")
-async def toggle_status_cb(callback: types.CallbackQuery):
-    user_id = callback.from_user.id
-    new_status = await toggle_driver_status(user_id)
-    driver = await get_driver_info(user_id)
-    lang = await get_lang(user_id)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    status_str = "🟢 Online" if new_status == 1 else "🔴 Offline"
-    await callback.message.edit_text(t["driver_menu"].format(balance=driver["balance"], rating=driver["rating"], status=status_str), reply_markup=await get_driver_keyboard(user_id))
-    await callback.answer()
-
-@dp.callback_query(F.data == "driver_orders")
-async def show_available_orders(callback: types.CallbackQuery):
-    user_id = callback.from_user.id
-    lang = await get_lang(user_id)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    driver = await get_driver_info(user_id)
-    if not driver:
-        await callback.answer(t["not_driver_alert"], show_alert=True)
-        return
-        
-    async with aiosqlite.connect(DB_NAME) as conn:
-        async with conn.execute("SELECT id, order_type, from_place, to_place, details FROM orders WHERE status = 'new' ORDER BY id DESC LIMIT 5") as cursor:
-            orders = await cursor.fetchall()
-            
-    if not orders:
-        await callback.message.answer(t["no_available_orders"])
-        await callback.answer()
-        return
-        
-    btn_text = "🟢 Принять" if lang=="ru" else ("🟢 Qabul qilish" if lang=="uz" else "🟢 Accept")
-    for o in orders:
-        text = f"📋 Order #{o[0]}\n🏷 Type: {o[1]}\n📍 Route: {o[2]} ➔ {o[3]}\n📝 {o[4]}\n💰 Commission: {ORDER_COMMISSION:,} UZS"
-        btn = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=btn_text, callback_data=f"accept_order_{o[0]}")]])
-        await callback.message.answer(text, reply_markup=btn)
-    await callback.answer()
-
-@dp.callback_query(F.data.startswith("accept_order_"))
-async def accept_order_action(callback: types.CallbackQuery):
-    order_id = int(callback.data.split("_")[2])
-    driver_id = callback.from_user.id
-    lang = await get_lang(driver_id)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    driver = await get_driver_info(driver_id)
+@dp.message(DriverRegState.waiting_for_phone)
+async def process_driver_phone_text(message: types.Message, state: FSMContext):
+    phone = message.text
+    data = await state.get_data()
+    data['phone'] = phone
+    data['balance'] = 10000
     
-    if not driver:
-        await callback.answer(t["not_driver_alert"], show_alert=True)
-        return
-
-    if driver["balance"] < ORDER_COMMISSION:
-        await callback.answer(t["insufficient_balance"], show_alert=True)
-        return
-        
-    async with aiosqlite.connect(DB_NAME) as conn:
-        async with conn.execute("SELECT status, user_id FROM orders WHERE id = ?", (order_id,)) as cursor:
-            row = await cursor.fetchone()
-            if not row or row[0] != 'new':
-                await callback.answer(t["order_already_processed"], show_alert=True)
-                return
-            client_id = row[1]
-            
-        await conn.execute("UPDATE orders SET status = 'accepted', driver_id = ? WHERE id = ?", (driver_id, order_id))
-        await conn.commit()
-        
-    await update_driver_balance(driver_id, -ORDER_COMMISSION)
-    await callback.message.answer(t["order_accepted_driver"].format(order_id=order_id, commission=ORDER_COMMISSION))
+    await save_driver(message.from_user.id, data)
+    await state.clear()
     
-    driver_username = callback.from_user.username
-    driver_contact = f"@{driver_username}" if driver_username else f"<a href='tg://user?id={driver_id}'>Driver</a>"
-
-    try:
-        c_lang = await get_lang(client_id)
-        finish_btn_text = "🏁 Завершить" if c_lang=="ru" else ("🏁 Yakunlash" if c_lang=="uz" else "🏁 Finish")
-        finish_btn = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=finish_btn_text, callback_data=f"finish_order_{order_id}")]])
-        await bot_instance.send_message(
-            client_id, 
-            f"🎉 <b>Your order #{order_id} has been accepted by a driver!</b>\n\n"
-            f"👨‍✈️ <b>Driver:</b> {driver['first_name']} {driver['last_name']} ({driver_contact})\n"
-            f"🚗 <b>Car:</b> {driver['car_model']} ({driver['car_number']})\n"
-            f"📞 <b>Phone:</b> {driver['phone']}", 
-            reply_markup=finish_btn,
-            parse_mode="HTML"
-        )
-    except Exception:
-        pass
-    await callback.answer()
-
-@dp.callback_query(F.data.startswith("finish_order_"))
-async def finish_order_action(callback: types.CallbackQuery):
-    order_id = int(callback.data.split("_")[2])
-    lang = await get_lang(callback.from_user.id)
+    lang = await get_lang(message.from_user.id)
     t = TEXTS.get(lang, TEXTS["ru"])
-    async with aiosqlite.connect(DB_NAME) as conn:
-        await conn.execute("UPDATE orders SET status = 'completed' WHERE id = ?", (order_id,))
-        async with conn.execute("SELECT user_id FROM orders WHERE id = ?", (order_id,)) as cursor:
-            row = await cursor.fetchone()
-            client_id = row[0] if row else None
-        await conn.commit()
-        
-    if client_id:
-        await check_and_apply_referral_bonus(client_id)
-        client_lang = await get_lang(client_id)
-        ct = TEXTS.get(client_lang, TEXTS["ru"])
-        await bot_instance.send_message(client_id, ct["rating_prompt"], reply_markup=get_rating_keyboard(order_id))
-        
-    await callback.message.answer(t["trip_finished"])
-    await callback.answer()
-
-@dp.callback_query(F.data.startswith("rate_"))
-async def process_rating(callback: types.CallbackQuery):
-    parts = callback.data.split("_")
-    order_id, stars = int(parts[1]), int(parts[2])
     
-    async with aiosqlite.connect(DB_NAME) as conn:
-        async with conn.execute("SELECT driver_id FROM orders WHERE id = ?", (order_id,)) as cursor:
-            row = await cursor.fetchone()
-            driver_id = row[0] if row else None
-            
-        if driver_id:
-            async with conn.execute("SELECT rating, total_ratings FROM drivers WHERE user_id = ?", (driver_id,)) as cursor:
-                d_row = await cursor.fetchone()
-                if d_row:
-                    old_rating, total = d_row[0], d_row[1]
-                    new_total = total + 1
-                    new_rating = ((old_rating * total) + stars) / new_total
-                    await conn.execute("UPDATE drivers SET rating = ?, total_ratings = ? WHERE user_id = ?", (new_rating, new_total, driver_id))
-                    await conn.commit()
-                    
-    lang = await get_lang(callback.from_user.id)
-    t = TEXTS.get(lang, TEXTS["ru"])
-    await callback.message.edit_text(t["rating_thanks"])
-    await callback.answer()
+    await message.answer(t["driver_reg_success"], reply_markup=await get_main_keyboard(message.from_user.id))
+
+
 # --- ВЕБ-СЕРВЕР ДЛЯ УДЕРЖАНИЯ ПОРТА НА RENDER ---
+
 async def handle(request):
     return web.Response(text="Yoldosh Bot is running!")
 
