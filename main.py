@@ -1733,7 +1733,7 @@ async def main():
     
     await init_db()
     
-    # 🌐 Сначала запускаем веб-сервер для Render
+    # 🌐 Фоном запускаем веб-сервер для Render
     asyncio.create_task(start_background_web_server())
     print("🌐 Фоновый веб-сервер успешно запущен!")
     
