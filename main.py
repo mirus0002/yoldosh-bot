@@ -174,15 +174,6 @@ async def get_driver_info(user_id: int):
                 }
             return None
 
-async def toggle_driver_status(user_id: int) -> int:
-    async with aiosqlite.connect(DB_NAME) as conn:
-        async with conn.execute("SELECT is_active FROM drivers WHERE user_id = ?", (user_id,)) as cursor:
-            row = await cursor.fetchone()
-            new_status = 0 if row and row[0] == 1 else 1
-        await conn.execute("UPDATE drivers SET is_active = ? WHERE user_id = ?", (new_status, user_id))
-        await conn.commit()
-        return new_status
-
 async def save_driver(user_id: int, data: dict):
     async with aiosqlite.connect(DB_NAME) as conn:
         await conn.execute('''
@@ -190,17 +181,6 @@ async def save_driver(user_id: int, data: dict):
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 5.0, 0)
         ''', (user_id, data['first_name'], data['last_name'], data['car_model'], data['car_number'], data['tech_passport'], data['phone'], data['balance']))
         await conn.commit()
-
-async def update_driver_balance(user_id: int, amount: int):
-    async with aiosqlite.connect(DB_NAME) as conn:
-        await conn.execute("UPDATE drivers SET balance = balance + ? WHERE user_id = ?", (amount, user_id))
-        await conn.commit()
-
-async def get_active_drivers_dict():
-    async with aiosqlite.connect(DB_NAME) as conn:
-        async with conn.execute("SELECT user_id, first_name FROM drivers WHERE is_active = 1") as cursor:
-            rows = await cursor.fetchall()
-            return {r[0]: {"first_name": r[1]} for r in rows}
 
 async def save_order_to_db(user_id: int, order_type: str, from_place: str, to_place: str, phone: str, details: str) -> int:
     async with aiosqlite.connect(DB_NAME) as conn:
@@ -223,14 +203,6 @@ class OrderState(StatesGroup):
     waiting_for_phone = State()
     waiting_for_passengers = State()
 
-class ParcelState(StatesGroup):
-    waiting_for_from = State()
-    waiting_for_to = State()
-    waiting_for_weight = State()
-    waiting_for_space = State()
-    waiting_for_fragile = State()
-    waiting_for_phone = State()
-
 class DriverRegState(StatesGroup):
     waiting_for_first_name = State()
     waiting_for_last_name = State()
@@ -250,28 +222,16 @@ TEXTS = {
         "btn_parcel": "📦 Отправить посылку",
         "btn_driver": "👨‍✈️ Кабинет водителя",
         "btn_menu": "⚙️ Дополнительно / Меню",
-        "btn_ref": "👥 Рефералы и бонус",
-        "btn_my_orders": "📋 Мои поездки",
-        "btn_lang": "🌐 Сменить язык",
-        "btn_rules": "📜 Правила сервиса",
-        "btn_promo": "🎁 Ввести промокод",
-        "btn_support": "🆘 Поддержка",
-        "btn_back_main": "⬅️ На главную",
-        "more_menu_text": "📂 Выберите нужный раздел в меню ниже:",
-        "rules_text": "📜 Правила сервиса «Yo'ldosh Taxi»\n\n1. Платформа является информационным посредником.\n2. Ответственность за ПДД и безопасность несут водитель и пассажир.",
-        "ref_text": "👥 Реферальная программа\n\n📊 Приглашено друзей: {ref_count}\n💰 Ваш накопленный бонус: {bonus:,} сумов\n\nВаша персональная ссылка:\n{link}\n\n🎁 +5,000 сумов за каждого друга после его первой поездки!",
         "ask_from": "📍 Шаг 1/6: Откуда отправляемся? Выберите город или введите вручную:",
         "ask_to": "🎯 Шаг 2/6: Куда направляетесь? Выберите город или введите вручную:",
         "ask_class": "🚗 Шаг 3/6: Выберите класс поездки:",
         "ask_options": "⚙️ Шаг 4/6: Выберите дополнительные опции:",
-        "send_phone": "📱 Шаг 5/6: Отправьте номер кнопкой ниже или введите вручную:",
+        "send_phone": "📱 Шаг 5/6: Отправьте номер телефона или контакт:",
         "btn_send_phone": "📞 Отправить мой контакт",
         "passengers_count": "👥 Шаг 6/6: Выберите количество мест:",
-        "order_success": "✅ Заказ зарегистрирован! Оповещаем водителей.",
+        "order_success": "✅ Заказ успешно зарегистрирован! Оповещаем водителей.",
         "driver_menu": "👨‍✈️ Кабинет водителя\n\n💰 Баланс: {balance:,} сумов\n⭐ Рейтинг: {rating:.1f}\nСтатус: {status}",
         "btn_driver_reg": "📝 Регистрация водителя",
-        "btn_driver_orders": "📋 Доступные заказы",
-        "btn_topup_balance": "💳 Пополнить баланс",
         "btn_toggle_on": "🔴 В оффлайн (Отдых)",
         "btn_toggle_off": "🟢 В сеть (Работать)",
         "driver_not_registered": "⚠️ Вы не зарегистрированы как водитель!",
@@ -292,15 +252,6 @@ TEXTS = {
         "btn_parcel": "📦 Posilka yuborish",
         "btn_driver": "👨‍✈️ Haydovchi kabineti",
         "btn_menu": "⚙️ Qo'shimcha / Menyu",
-        "btn_ref": "👥 Takliflar va bonus",
-        "btn_my_orders": "📋 Mening safarlarim",
-        "btn_lang": "🌐 Tilni o'zgartirish",
-        "btn_rules": "📜 Xizmat qoidalari",
-        "btn_promo": "🎁 Promokodni kiritish",
-        "btn_support": "🆘 Qo'llab-quvvatlash",
-        "btn_back_main": "⬅️ Asosiy menyuga",
-        "more_menu_text": "📂 Kerakli bo'limni tanlang:",
-        "rules_text": "📜 «Yo'ldosh Taxi» xizmat qoidalari.",
         "ask_from": "📍 1/6-qadam: Qayerdan jo'nab ketasiz?",
         "ask_to": "🎯 2/6-qadam: Qayerga borasiz?",
         "ask_class": "🚗 3/6-qadam: Safar sinfini tanlang:",
@@ -311,8 +262,6 @@ TEXTS = {
         "order_success": "✅ Buyurtma ro'yxatga olindi!",
         "driver_menu": "👨‍✈️ Haydovchi kabineti\n\n💰 Balans: {balance:,} so'm\n⭐ Reyting: {rating:.1f}",
         "btn_driver_reg": "📝 Haydovchi sifatida ro'yxatdan o'tish",
-        "btn_driver_orders": "📋 Mavjud buyurtmalar",
-        "btn_topup_balance": "💳 Balansni to'ldirish",
         "btn_toggle_on": "🔴 Dam olish",
         "btn_toggle_off": "🟢 Ishlash",
         "driver_not_registered": "⚠️ Siz haydovchi emassiz!",
@@ -333,15 +282,6 @@ TEXTS = {
         "btn_parcel": "📦 Send a Parcel",
         "btn_driver": "👨‍✈️ Driver Cabinet",
         "btn_menu": "⚙️ More / Menu",
-        "btn_ref": "👥 Referrals & Bonus",
-        "btn_my_orders": "📋 My Rides",
-        "btn_lang": "🌐 Change Language",
-        "btn_rules": "📜 Service Rules",
-        "btn_promo": "🎁 Enter Promo Code",
-        "btn_support": "🆘 Support",
-        "btn_back_main": "⬅️ Main Menu",
-        "more_menu_text": "📂 Choose an option below:",
-        "rules_text": "📜 Service rules.",
         "ask_from": "📍 Step 1/6: Departing from?",
         "ask_to": "🎯 Step 2/6: Heading to?",
         "ask_class": "🚗 Step 3/6: Select class:",
@@ -352,8 +292,6 @@ TEXTS = {
         "order_success": "✅ Order registered!",
         "driver_menu": "👨‍✈️ Driver Cabinet",
         "btn_driver_reg": "📝 Driver Registration",
-        "btn_driver_orders": "📋 Available Orders",
-        "btn_topup_balance": "💳 Top Up",
         "btn_toggle_on": "🔴 Go Offline",
         "btn_toggle_off": "🟢 Go Online",
         "driver_not_registered": "⚠️ Not a driver!",
@@ -392,6 +330,30 @@ async def get_main_keyboard(user_id: int):
             [KeyboardButton(text=t["btn_driver"]), KeyboardButton(text=t["btn_menu"])],
         ],
         resize_keyboard=True
+    )
+
+def get_cities_keyboard(lang="ru"):
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🏙 Ташкент", callback_data="city_Ташкент"), InlineKeyboardButton(text="🕌 Самарканд", callback_data="city_Самарканд")],
+            [InlineKeyboardButton(text="🏛 Бухара", callback_data="city_Бухара"), InlineKeyboardButton(text="🏞 Фергана", callback_data="city_Фергана")],
+            [InlineKeyboardButton(text="🏔 Андижан", callback_data="city_Андижан"), InlineKeyboardButton(text="🌅 Наманган", callback_data="city_Наманган")],
+        ]
+    )
+
+def get_car_class_keyboard(lang="ru"):
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🚘 Эконом", callback_data="class_Эконом"), InlineKeyboardButton(text="🚙 Комфорт", callback_data="class_Комфорт")]
+        ]
+    )
+
+def get_car_options_keyboard(lang="ru"):
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="❄️ Кондиционер", callback_data="opt_Кондиционер"), InlineKeyboardButton(text="🎒 Багажник", callback_data="opt_Багажник")],
+            [InlineKeyboardButton(text="✅ Без опций", callback_data="opt_Без опций")]
+        ]
     )
 
 def get_phone_keyboard(lang_code="ru"):
@@ -440,17 +402,73 @@ async def process_language_choice(callback: types.CallbackQuery, state: FSMConte
     await callback.answer()
 
 
-# Кнопка: Заказать поездку (Старт заказа)
+# --- ЛОГИКА ЗАКАЗА ПОЕЗДКИ ---
+
 @dp.message(F.text.in_({TEXTS["ru"]["btn_order"], TEXTS["uz"]["btn_order"], TEXTS["en"]["btn_order"]}))
 async def start_order(message: types.Message, state: FSMContext):
     await state.clear()
     lang = await get_user_lang(message.from_user.id)
     t = TEXTS.get(lang, TEXTS["ru"])
     await state.set_state(OrderState.waiting_for_from)
-    await message.answer(t["ask_from"], reply_markup=ReplyKeyboardRemove())
+    await message.answer(t["ask_from"], reply_markup=get_cities_keyboard(lang))
 
+@dp.callback_query(OrderState.waiting_for_from, F.data.startswith("city_"))
+async def process_from_city(callback: types.CallbackQuery, state: FSMContext):
+    city = callback.data.split("_")[1]
+    await state.update_data(from_place=city)
+    await state.set_state(OrderState.waiting_for_to)
+    lang = await get_user_lang(callback.from_user.id)
+    t = TEXTS.get(lang, TEXTS["ru"])
+    await callback.message.edit_text(f"{t['ask_from']} <b>{city}</b>\n\n{t['ask_to']}", reply_markup=get_cities_keyboard(lang))
+    await callback.answer()
 
-# Обработка телефона для заказа
+@dp.message(OrderState.waiting_for_from)
+async def process_from_text(message: types.Message, state: FSMContext):
+    await state.update_data(from_place=message.text)
+    await state.set_state(OrderState.waiting_for_to)
+    lang = await get_user_lang(message.from_user.id)
+    t = TEXTS.get(lang, TEXTS["ru"])
+    await message.answer(t["ask_to"], reply_markup=get_cities_keyboard(lang))
+
+@dp.callback_query(OrderState.waiting_for_to, F.data.startswith("city_"))
+async def process_to_city(callback: types.CallbackQuery, state: FSMContext):
+    city = callback.data.split("_")[1]
+    await state.update_data(to_place=city)
+    await state.set_state(OrderState.waiting_for_class)
+    lang = await get_user_lang(callback.from_user.id)
+    t = TEXTS.get(lang, TEXTS["ru"])
+    await callback.message.edit_text(t["ask_class"], reply_markup=get_car_class_keyboard(lang))
+    await callback.answer()
+
+@dp.message(OrderState.waiting_for_to)
+async def process_to_text(message: types.Message, state: FSMContext):
+    await state.update_data(to_place=message.text)
+    await state.set_state(OrderState.waiting_for_class)
+    lang = await get_user_lang(message.from_user.id)
+    t = TEXTS.get(lang, TEXTS["ru"])
+    await message.answer(t["ask_class"], reply_markup=get_car_class_keyboard(lang))
+
+@dp.callback_query(OrderState.waiting_for_class, F.data.startswith("class_"))
+async def process_car_class(callback: types.CallbackQuery, state: FSMContext):
+    car_class = callback.data.split("_")[1]
+    await state.update_data(car_class=car_class)
+    await state.set_state(OrderState.waiting_for_options)
+    lang = await get_user_lang(callback.from_user.id)
+    t = TEXTS.get(lang, TEXTS["ru"])
+    await callback.message.edit_text(t["ask_options"], reply_markup=get_car_options_keyboard(lang))
+    await callback.answer()
+
+@dp.callback_query(OrderState.waiting_for_options, F.data.startswith("opt_"))
+async def process_car_options(callback: types.CallbackQuery, state: FSMContext):
+    option = callback.data.split("_")[1]
+    await state.update_data(options=option)
+    await state.set_state(OrderState.waiting_for_phone)
+    lang = await get_user_lang(callback.from_user.id)
+    t = TEXTS.get(lang, TEXTS["ru"])
+    await callback.message.delete()
+    await callback.message.answer(t["send_phone"], reply_markup=get_phone_keyboard(lang))
+    await callback.answer()
+
 @dp.message(OrderState.waiting_for_phone, F.contact)
 async def process_phone_contact_order(message: types.Message, state: FSMContext):
     await state.update_data(phone=message.contact.phone_number)
@@ -467,8 +485,30 @@ async def process_phone_text_order(message: types.Message, state: FSMContext):
     t = TEXTS.get(lang, TEXTS["ru"])
     await message.answer(t["passengers_count"], reply_markup=get_passengers_keyboard(lang))
 
+@dp.callback_query(OrderState.waiting_for_passengers, F.data.startswith("pass_"))
+async def process_passengers_count(callback: types.CallbackQuery, state: FSMContext):
+    pass_val = callback.data.split("_")[1]
+    data = await state.get_data()
+    
+    await save_order_to_db(
+        user_id=callback.from_user.id,
+        order_type="trip",
+        from_place=data.get("from_place"),
+        to_place=data.get("to_place"),
+        phone=data.get("phone"),
+        details=f"Класс: {data.get('car_class')}, Опции: {data.get('options')}, Мест: {pass_val}"
+    )
+    
+    lang = await get_user_lang(callback.from_user.id)
+    t = TEXTS.get(lang, TEXTS["ru"])
+    await state.clear()
+    await callback.message.edit_text(t["order_success"])
+    await callback.message.answer(t["main_menu"], reply_markup=await get_main_keyboard(callback.from_user.id))
+    await callback.answer()
 
-# Кнопка: Кабинет водителя
+
+# --- КАБИНЕТ ВОДИТЕЛЯ ---
+
 @dp.message(F.text.in_({TEXTS["ru"]["btn_driver"], TEXTS["uz"]["btn_driver"], TEXTS["en"]["btn_driver"]}))
 async def driver_cabinet(message: types.Message, state: FSMContext):
     lang = await get_user_lang(message.from_user.id)
@@ -481,7 +521,6 @@ async def driver_cabinet(message: types.Message, state: FSMContext):
         status_text = t["btn_toggle_on"] if driver["is_active"] else t["btn_toggle_off"]
         await message.answer(t["driver_menu"].format(balance=driver["balance"], rating=driver["rating"], status=status_text))
 
-# Старт регистрации водителя
 @dp.callback_query(F.data == "start_driver_reg")
 async def start_driver_registration(callback: types.CallbackQuery, state: FSMContext):
     lang = await get_user_lang(callback.from_user.id)
@@ -530,7 +569,6 @@ async def reg_driver_passport(message: types.Message, state: FSMContext):
     t = TEXTS.get(lang, TEXTS["ru"])
     await message.answer(t["driver_reg_6"], reply_markup=get_phone_keyboard(lang))
 
-# Шаг телефона при регистрации водителя
 @dp.message(DriverRegState.waiting_for_phone, F.contact)
 async def process_driver_phone_contact(message: types.Message, state: FSMContext):
     data = await state.get_data()
