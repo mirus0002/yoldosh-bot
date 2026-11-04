@@ -16,7 +16,7 @@ from aiogram.types import (
     ReplyKeyboardRemove,
 )
 
-TOKEN = "AAFnQui2UUcMSNRNbPhiU-cp8vt5-SUF_KQ"
+TOKEN = "8958743093:AAEyLj7SQZAeikwQ5AMuNBrBETnkaZLsY8M"
 
 SUPPORT_PHONE = "+998 91 773-51-52"
 CARD_NUMBER = "5614683400216925 (Abdumomin abdurahmanov)"
