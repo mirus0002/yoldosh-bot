@@ -20,7 +20,7 @@ from aiogram.types import (
 TOKEN = "8958743093:AAF4WxbQsQl96sTheScyOrO_C8lftm0-mWQ"
 
 SUPPORT_PHONE = "+998 91 773-51-52"
-CARD_NUMBER = "5614683400216925 (Abdumomin abdurahmanov)"
+CARD_NUMBER = "4023060518850838 (MIRXAMIDJON MIRBADALOV)"
 ADMIN_PIN = "2009mmmm"
 VIP_PRICE = 50000  # Стоимость VIP-статуса в сумах
 REFERRAL_BONUS = 5000  # Бонус за приглашенного друга
@@ -432,7 +432,7 @@ def get_cancel_keyboard(lang="ru"):
     )
 
 
-# --- РАССЫЛКА ЗАКАЗОВ ВОДИТЕЛЯМ С УЧЕТОМ КОМИССИИ И VIP ---
+# --- РАССЫЛКА ЗАКАЗОВ ВОДИТЕЛЯМ ---
 
 async def notify_drivers_about_order(bot: Bot, order_id: int, user_id: int, order_type: str, from_place: str, to_place: str, phone: str, details: str, price: int, is_urgent: int):
     async with aiosqlite.connect(DB_NAME) as conn:
@@ -534,7 +534,7 @@ async def cancel_any_state(message: types.Message, state: FSMContext):
     await message.answer(t["action_cancelled"], reply_markup=await get_main_keyboard(message.from_user.id))
 
 
-# --- АДМИН-ПАНЕЛЬ ---
+# --- АДМИН-ПАНЕЛЬ С СТАТИСТИКОЙ ---
 
 @dp.message(Command("admin"))
 async def cmd_admin(message: types.Message, state: FSMContext):
@@ -550,12 +550,30 @@ async def process_admin_pin(message: types.Message, state: FSMContext):
     t = TEXTS.get(lang, TEXTS["ru"])
     if message.text == ADMIN_PIN:
         await state.clear()
+        
+        # Подсчет статистики пользователей
+        async with aiosqlite.connect(DB_NAME) as conn:
+            async with conn.execute("SELECT COUNT(*) FROM users") as cur1:
+                total_users = (await cur1.fetchone())[0]
+            async with conn.execute("SELECT COUNT(*) FROM drivers") as cur2:
+                total_drivers = (await cur2.fetchone())[0]
+            
+            total_clients = max(0, total_users - total_drivers)
+
+        stats_text = (
+            f"🛠 **Панель администратора**\n\n"
+            f"📊 **Статистика пользователей:**\n"
+            f"👥 Всего пользователей: **{total_users}**\n"
+            f"👤 Пассажиров (клиентов): **{total_clients}**\n"
+            f"👨‍✈️ Водителей: **{total_drivers}**"
+        )
+
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text=t["btn_admin_ban"], callback_data="admin_ban_menu")],
             [InlineKeyboardButton(text=t["btn_admin_vip"], callback_data="admin_vip_menu")],
             [InlineKeyboardButton(text=t["btn_admin_profiles"], callback_data="admin_profiles_menu")]
         ])
-        await message.answer(t["admin_panel"], reply_markup=kb)
+        await message.answer(stats_text, reply_markup=kb, parse_mode="Markdown")
     else:
         await message.answer(t["admin_wrong_pin"])
 
@@ -601,6 +619,10 @@ async def process_admin_vip_user(message: types.Message, state: FSMContext):
                 if row:
                     new_vip = 0 if row[0] == 1 else 1
                     await conn.execute("UPDATE users SET is_vip = ? WHERE user_id = ?", (new_vip, target_id))
+                    await conn.commit()
+                else:
+                    new_vip = 1
+                    await conn.execute("INSERT INTO users (user_id, is_vip) VALUES (?, 1)", (target_id,))
                     await conn.commit()
         await state.clear()
         await message.answer(f"{t['vip_updated_success']} (Новый статус VIP: {'Вкл' if new_vip else 'Выкл'})", reply_markup=await get_main_keyboard(message.from_user.id))
@@ -660,6 +682,7 @@ async def menu_my_profile(callback: types.CallbackQuery):
     driver = await get_driver_info(user_id)
     bot_info = await callback.bot.get_me()
     ref_link = f"https://t.me/{bot_info.username}?start={user_id}"
+    channel_link = "https://t.me/Yoldosh_Taxi_Official"
     
     async with aiosqlite.connect(DB_NAME) as conn:
         async with conn.execute("SELECT balance_bonus FROM users WHERE user_id = ?", (user_id,)) as cursor:
@@ -667,8 +690,9 @@ async def menu_my_profile(callback: types.CallbackQuery):
             bonus = row[0] if row else 0
 
     vip_str = "👑 VIP Активен" if is_vip else ("❌ Нет" if lang != 'uz' else "❌ Yo'q")
+    
     if lang == 'uz':
-        text = f"👤 **Sizning profilingiz:**\n\n🆔 ID: `{user_id}`\n🌐 Til: `{lang}`\n👑 VIP status: {vip_str}\n💰 Bonus balans: {bonus:,} so'm\n\n🔗 Referal havolangiz:\n`{ref_link}`"
+        text = f"👤 **Sizning profilingiz:**\n\n🆔 ID: `{user_id}`\n🌐 Til: `{lang}`\n👑 VIP status: {vip_str}\n💰 Bonus balans: {bonus:,} so'm\n\n📞 Murojat uchun: `{SUPPORT_PHONE}`\n📢 Rasmiy kanal: {channel_link}\n\n🔗 Referal havolangiz:\n`{ref_link}`"
         if driver:
             text += f"\n\n👨‍✈️ **Haydovchi ma'lumotlari:**\nIsm: {driver['first_name']} {driver['last_name']}\nMashina: {driver['car_model']} ({driver['car_number']})\nTel: {driver['phone']}\nBalans: {driver['balance']:,} so'm"
             btn_edit = "📝 Anketani tahrirlash"
@@ -676,7 +700,7 @@ async def menu_my_profile(callback: types.CallbackQuery):
             btn_edit = "📝 Haydovchi bo'lish"
         btn_delete = "❌ Profilni o'chirish"
     elif lang == 'en':
-        text = f"👤 **Your Profile:**\n\n🆔 ID: `{user_id}`\n🌐 Language: `{lang}`\n👑 VIP Status: {vip_str}\n💰 Bonus: {bonus:,} UZS\n\n🔗 Referral link:\n`{ref_link}`"
+        text = f"👤 **Your Profile:**\n\n🆔 ID: `{user_id}`\n🌐 Language: `{lang}`\n👑 VIP Status: {vip_str}\n💰 Bonus: {bonus:,} UZS\n\n📞 Support contact: `{SUPPORT_PHONE}`\n📢 Official Channel: {channel_link}\n\n🔗 Referral link:\n`{ref_link}`"
         if driver:
             text += f"\n\n👨‍✈️ **Driver Info:**\nName: {driver['first_name']} {driver['last_name']}\nCar: {driver['car_model']} ({driver['car_number']})\nPhone: {driver['phone']}\nBalance: {driver['balance']:,}"
             btn_edit = "📝 Edit Profile"
@@ -684,7 +708,7 @@ async def menu_my_profile(callback: types.CallbackQuery):
             btn_edit = "📝 Become Driver"
         btn_delete = "❌ Delete Profile"
     else:
-        text = f"👤 **Ваш профиль:**\n\n🆔 ID: `{user_id}`\n🌐 Язык: `{lang}`\n👑 VIP статус: {vip_str}\n💰 Бонусный баланс: {bonus:,} сум\n\n🔗 Ваша реферальная ссылка:\n`{ref_link}`"
+        text = f"👤 **Ваш профиль:**\n\n🆔 ID: `{user_id}`\n🌐 Язык: `{lang}`\n👑 VIP статус: {vip_str}\n💰 Бонусный баланс: {bonus:,} сум\n\n📞 Murojat uchun: `{SUPPORT_PHONE}`\n📢 Официальный канал: {channel_link}\n\n🔗 Ваша реферальная ссылка:\n`{ref_link}`"
         if driver:
             text += f"\n\n👨‍✈️ **Данные водителя:**\nИмя: {driver['first_name']} {driver['last_name']}\nМашина: {driver['car_model']} ({driver['car_number']})\nТел: {driver['phone']}\nБаланс: {driver['balance']:,} сум"
             btn_edit = "📝 Изменить анкету"
@@ -703,11 +727,11 @@ async def menu_my_profile(callback: types.CallbackQuery):
 async def menu_buy_vip(callback: types.CallbackQuery):
     lang = await get_user_lang(callback.from_user.id)
     if lang == 'uz':
-        text = f"👑 **VIP statusni sotib olish**\n\nNarxi: **{VIP_PRICE:,} so'm**\nKarta raqami: `{CARD_NUMBER}`\n\nTo'lovni amalga oshirgach, chekni qo'llab-quvvatlash xizmatiga yuboring yoki administrator avtomatik faollashtiradi."
+        text = f"👑 **VIP statusni sotib olish**\n\nNarxi: **{VIP_PRICE:,} so'm**\nKarta raqami: `{CARD_NUMBER}`\n\nTo'lovni amalga oshirgach, chekni qo'llab-quvvatlash xizmatiga yuboring."
     elif lang == 'en':
         text = f"👑 **Buy VIP Status**\n\nPrice: **{VIP_PRICE:,} UZS**\nCard: `{CARD_NUMBER}`\n\nSend receipt after payment."
     else:
-        text = f"👑 **Покупка VIP статуса**\n\nСтоимость: **{VIP_PRICE:,} сум**\nРеквизиты для оплаты: `{CARD_NUMBER}`\n\nПосле оплаты отправьте чек в поддержку, либо администратор подтвердит ваш статус."
+        text = f"👑 **Покупка VIP статуса**\n\nСтоимость: **{VIP_PRICE:,} сум**\nРеквизиты для оплаты: `{CARD_NUMBER}`\n\nПосле оплаты отправьте чек в поддержку."
     await callback.message.answer(text, parse_mode="Markdown")
     await callback.answer()
 
@@ -794,14 +818,26 @@ async def process_order_price(message: types.Message, state: FSMContext):
     try:
         price = int(message.text.strip())
         await state.update_data(price=price)
-        await state.set_state(OrderState.waiting_for_urgent)
-        await message.answer(t["ask_urgent"], reply_markup=get_urgent_keyboard(lang))
+        
+        # Проверяем, есть ли у пользователя VIP-статус для срочного заказа
+        user_vip = await is_user_vip(message.from_user.id)
+        if user_vip:
+            await state.set_state(OrderState.waiting_for_urgent)
+            await message.answer(t["ask_urgent"], reply_markup=get_urgent_keyboard(lang))
+        else:
+            # Если не VIP — автоматически ставим обычный заказ (is_urgent = 0) и пропускаем шаг
+            await state.update_data(is_urgent=0)
+            await state.set_state(OrderState.waiting_for_phone)
+            await message.answer(t["send_phone"], reply_markup=get_phone_keyboard(lang))
     except ValueError:
         await message.answer("⚠️ Введите корректную сумму числом (например: 50000):")
 
 @dp.callback_query(OrderState.waiting_for_urgent, F.data.startswith("urgent_"))
 async def process_order_urgent(callback: types.CallbackQuery, state: FSMContext):
-    is_urgent = int(callback.data.split("_")[1])
+    # Дополнительная проверка на всякий случай
+    user_vip = await is_user_vip(callback.from_user.id)
+    is_urgent = int(callback.data.split("_")[1]) if user_vip else 0
+    
     await state.update_data(is_urgent=is_urgent)
     await state.set_state(OrderState.waiting_for_phone)
     lang = await get_user_lang(callback.from_user.id)
@@ -911,7 +947,7 @@ async def parcel_to_city(callback: types.CallbackQuery, state: FSMContext):
 async def parcel_to_text(message: types.Message, state: FSMContext):
     await state.update_data(to_place=message.text)
     await state.set_state(ParcelState.waiting_for_details)
-    lang = await get_user_lang(callback.from_user.id)
+    lang = await get_user_lang(message.from_user.id)
     t = TEXTS.get(lang, TEXTS["ru"])
     await message.answer(t["parcel_desc"])
 
@@ -919,7 +955,7 @@ async def parcel_to_text(message: types.Message, state: FSMContext):
 async def parcel_details(message: types.Message, state: FSMContext):
     await state.update_data(details=message.text)
     await state.set_state(ParcelState.waiting_for_price)
-    lang = await get_user_lang(callback.from_user.id)
+    lang = await get_user_lang(message.from_user.id)
     t = TEXTS.get(lang, TEXTS["ru"])
     await message.answer(t["ask_price"], reply_markup=get_cancel_keyboard(lang))
 
@@ -930,14 +966,23 @@ async def parcel_price(message: types.Message, state: FSMContext):
     try:
         price = int(message.text.strip())
         await state.update_data(price=price)
-        await state.set_state(ParcelState.waiting_for_urgent)
-        await message.answer(t["ask_urgent"], reply_markup=get_urgent_keyboard(lang))
+        
+        user_vip = await is_user_vip(message.from_user.id)
+        if user_vip:
+            await state.set_state(ParcelState.waiting_for_urgent)
+            await message.answer(t["ask_urgent"], reply_markup=get_urgent_keyboard(lang))
+        else:
+            await state.update_data(is_urgent=0)
+            await state.set_state(ParcelState.waiting_for_phone)
+            await message.answer(t["send_phone"], reply_markup=get_phone_keyboard(lang))
     except ValueError:
         await message.answer("⚠️ Введите корректную сумму числом:")
 
 @dp.callback_query(ParcelState.waiting_for_urgent, F.data.startswith("urgent_"))
 async def parcel_urgent(callback: types.CallbackQuery, state: FSMContext):
-    is_urgent = int(callback.data.split("_")[1])
+    user_vip = await is_user_vip(callback.from_user.id)
+    is_urgent = int(callback.data.split("_")[1]) if user_vip else 0
+
     await state.update_data(is_urgent=is_urgent)
     await state.set_state(ParcelState.waiting_for_phone)
     lang = await get_user_lang(callback.from_user.id)
@@ -994,7 +1039,7 @@ async def parcel_finish_text(message: types.Message, state: FSMContext):
     await notify_drivers_about_order(message.bot, order_id, message.from_user.id, "parcel", from_p, to_p, phone, details, price, is_urgent)
 
 
-# --- КАБИНЕТ ВОДИТЕЛЯ И ПРИНЯТИЕ ЗАКАЗОВ (С СПИСАНИЕМ 20%) ---
+# --- КАБИНЕТ ВОДИТЕЛЯ И ПРИНЯТИЕ ЗАКАЗОВ ---
 
 @dp.message(F.text.in_({TEXTS["ru"]["btn_driver"], TEXTS["uz"]["btn_driver"], TEXTS["en"]["btn_driver"]}))
 async def driver_cabinet(message: types.Message, state: FSMContext):
@@ -1054,7 +1099,6 @@ async def accept_order_action(callback: types.CallbackQuery):
     driver_id = callback.from_user.id
     d_lang = await get_user_lang(driver_id)
 
-    # Проверяем баланс водителя для списания 20%
     driver_info = await get_driver_info(driver_id)
     if not driver_info:
         await callback.answer("⚠️ Вы не зарегистрированы как водитель!", show_alert=True)
@@ -1084,11 +1128,8 @@ async def accept_order_action(callback: types.CallbackQuery):
                 await callback.answer(low_bal_text, show_alert=True)
                 return
 
-            # Списываем 20% комиссию с водителя
             new_balance = driver_info["balance"] - commission
             await conn.execute("UPDATE drivers SET balance = ? WHERE user_id = ?", (new_balance, driver_id))
-
-            # Меняем статус заказа
             await conn.execute("UPDATE orders SET status = 'accepted', driver_id = ? WHERE id = ?", (driver_id, order_id))
 
             async with conn.execute("SELECT driver_id, message_id FROM order_messages WHERE order_id = ?", (order_id,)) as cur2:
