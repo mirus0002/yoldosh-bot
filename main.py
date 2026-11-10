@@ -50,7 +50,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("YoldoshTaxiProductionSystem")
 
-TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")  # Токен из окружения Render или напрямую
+TOKEN = os.getenv("8958743093:AAF4WxbQsQl96sTheScyOrO_C8lftm0-mWQ")  # Токен из окружения Render или напрямую
 ADMIN_PASSWORD = "2009mmmm"  # Пин-код администратора
 CHANNEL_USERNAME = "@Yoldosh_Taxi_Official"  # Официальный канал заказов и уведомлений
 PORT = int(os.getenv("PORT", 10000))  # Порт для веб-сервиса Render
