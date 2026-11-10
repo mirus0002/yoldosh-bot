@@ -599,7 +599,7 @@ async def process_order_schedule_time(message: Message, state: FSMContext) -> No
 
 
 @router.message(OrderStates.waiting_for_comment)
-async def finalize_order_creation(message: Message, state: FSMContext) -> None:
+async def (message: Message, state: FSMContext) -> None:
     comment = message.text
     data = await state.get_data()
     passenger_id = message.from_user.id
@@ -652,6 +652,33 @@ async def finalize_order_creation(message: Message, state: FSMContext) -> None:
 
     await state.clear()
 
+# 👇 ВСТАВЬ ЭТОТ БЛОК СЮДА 👇
+@router.callback_query(F.data.startswith("cancel_order_"))
+async def passenger_cancel_order_handler(callback: CallbackQuery) -> None:
+    order_id = int(callback.data.split("_")[2])
+    logger.info(f"Попытка отмены заказа #{order_id} пассажиром.")
+
+    async with aiosqlite.connect(DB_NAME) as db:
+        async with db.execute(
+            "SELECT status FROM orders WHERE order_id = ?", (order_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            if row and row[0] == "pending":
+                await db.execute(
+                    "UPDATE orders SET status = 'cancelled' WHERE order_id = ?",
+                    (order_id,),
+                )
+                await db.commit()
+                await callback.message.edit_text(
+                    f"❌ Заказ #{order_id} был успешно отменен пассажиром."
+                )
+                logger.info(f"Заказ #{order_id} успешно отменен.")
+            else:
+                await callback.answer(
+                    "⚠️ Заказ уже принят водителем или отменен!", 
+                    show_alert=True
+                )
+# 👆 КОНЕЦ ВСТАВКИ 👆
 
 @router.message(F.text.in_(["🚖 Свободные заказы", "🚖 Bo'sh buyurtmalar", "🚖 Free Orders"]))
 async def show_free_orders_for_drivers(message: Message) -> None:
