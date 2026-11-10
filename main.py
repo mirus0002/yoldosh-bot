@@ -820,8 +820,8 @@ async def trip_finish_handler(callback: CallbackQuery) -> None:
     async with aiosqlite.connect(DB_NAME) as db:
         await db.execute(
             "UPDATE orders SET status = 'completed' WHERE order_id = ?", (order_id,)
-        ) as cursor:
-            await db.commit()
+        )
+        await db.commit()
 
     await callback.message.edit_text(f"🏁 Поездка #{order_id} успешно завершена.")
 
