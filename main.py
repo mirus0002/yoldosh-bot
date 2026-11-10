@@ -3,17 +3,18 @@
 
 """
 =============================================================================
-Project: Yo'ldosh Taxi Telegram Bot (Production Version)
+Project: Yo'ldosh Taxi Telegram Bot (Production Render Version)
 Author: Mirxamidjon Mirbadalov
 Stack: Python 3.14, aiogram 3.x, aiosqlite, aiohttp
 Description: Full-featured taxi booking and management system for passengers 
              and drivers with multi-language support, payment receipts, SOS, 
-             Yandex Maps integration, promo codes, and admin panel.
+             Yandex Maps integration, promo codes, admin panel, and aiohttp web-server.
 =============================================================================
 """
 
 import asyncio
 import logging
+import os
 import sys
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple
@@ -33,6 +34,7 @@ from aiogram.types import (
     ReplyKeyboardRemove,
 )
 import aiosqlite
+from aiohttp import web
 
 # =====================================================================
 # 1. СИСТЕМНАЯ КОНФИГУРАЦИЯ И ЛОГИРОВАНИЕ
@@ -48,9 +50,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger("YoldoshTaxiProductionSystem")
 
-TOKEN = "YOUR_BOT_TOKEN_HERE"  # Токен вашего Telegram-бота
+TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")  # Токен из окружения Render или напрямую
 ADMIN_PASSWORD = "2009mmmm"  # Пин-код администратора
 CHANNEL_USERNAME = "@Yoldosh_Taxi_Official"  # Официальный канал заказов и уведомлений
+PORT = int(os.getenv("PORT", 10000))  # Порт для веб-сервиса Render
 
 bot = Bot(token=TOKEN)
 storage = MemoryStorage()
@@ -188,7 +191,6 @@ async def init_db() -> None:
     """Инициализирует всю структуру базы данных для Yo'ldosh Taxi."""
     logger.info("Инициализация базы данных aiosqlite...")
     async with aiosqlite.connect(DB_NAME) as db:
-        # Таблица пользователей
         await db.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 user_id INTEGER PRIMARY KEY,
@@ -202,7 +204,6 @@ async def init_db() -> None:
             )
         """)
 
-        # Таблица заказов
         await db.execute("""
             CREATE TABLE IF NOT EXISTS orders (
                 order_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -218,7 +219,6 @@ async def init_db() -> None:
             )
         """)
 
-        # Таблица промокодов
         await db.execute("""
             CREATE TABLE IF NOT EXISTS promos (
                 code TEXT PRIMARY KEY,
@@ -227,7 +227,6 @@ async def init_db() -> None:
             )
         """)
 
-        # Таблица истории поездок и квитанций
         await db.execute("""
             CREATE TABLE IF NOT EXISTS trips (
                 trip_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -274,7 +273,6 @@ class RatingStates(StatesGroup):
 # =====================================================================
 
 def get_main_menu(role: str = "passenger", lang: str = "ru") -> ReplyKeyboardMarkup:
-    """Возвращает главную клавиатуру в зависимости от роли и языка пользователя."""
     t = LANGS.get(lang, LANGS["ru"])
     if role == "driver":
         return ReplyKeyboardMarkup(
@@ -309,7 +307,6 @@ def get_main_menu(role: str = "passenger", lang: str = "ru") -> ReplyKeyboardMar
 
 
 def get_language_keyboard() -> InlineKeyboardMarkup:
-    """Инлайн клавиатура для выбора языка интерфейса."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -327,7 +324,6 @@ def get_language_keyboard() -> InlineKeyboardMarkup:
 
 @router.message(Command("start"))
 async def cmd_start(message: Message) -> None:
-    """Обработчик команды /start: регистрация пользователя и приветствие."""
     user_id = message.from_user.id
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     logger.info(f"Пользователь {user_id} вызвал команду /start")
@@ -349,8 +345,6 @@ async def cmd_start(message: Message) -> None:
                 role, lang = row
 
     t = LANGS.get(lang, LANGS["ru"])
-    
-    # Предложим также выбрать язык при старте, если нужно
     lang_kb = get_language_keyboard()
 
     await message.answer(
@@ -363,7 +357,6 @@ async def cmd_start(message: Message) -> None:
 
 @router.callback_query(F.data.startswith("lang_"))
 async def set_language_callback(callback: CallbackQuery) -> None:
-    """Обработчик изменения языка через инлайн-кнопки."""
     lang = callback.data.split("_")[1]
     user_id = callback.from_user.id
     logger.info(f"Пользователь {user_id} сменил язык на {lang}")
@@ -394,7 +387,6 @@ async def set_language_callback(callback: CallbackQuery) -> None:
     "🚖 Become a Driver"
 ]))
 async def switch_to_driver_mode(message: Message) -> None:
-    """Переключение пользователя в режим водителя."""
     user_id = message.from_user.id
     logger.info(f"Пользователь {user_id} переключился в режим водителя.")
 
@@ -422,7 +414,6 @@ async def switch_to_driver_mode(message: Message) -> None:
     "👤 My Profile"
 ]))
 async def show_user_profile(message: Message) -> None:
-    """Отображение профиля пользователя с балансом и статусом верификации."""
     user_id = message.from_user.id
     logger.info(f"Пользователь {user_id} запросил свой профиль.")
 
@@ -455,7 +446,6 @@ async def show_user_profile(message: Message) -> None:
 
 @router.message(Command("admin"))
 async def admin_panel_entry(message: Message, state: FSMContext) -> None:
-    """Вход в админ-панель для любого пользователя по пин-коду 2009mmmm."""
     user_id = message.from_user.id
     logger.info(f"Пользователь {user_id} инициировал вход в админ-панель.")
     await message.answer(
@@ -468,7 +458,6 @@ async def admin_panel_entry(message: Message, state: FSMContext) -> None:
 
 @router.message(AdminStates.waiting_for_password)
 async def verify_admin_password(message: Message, state: FSMContext) -> None:
-    """Проверка введенного пароля администратора."""
     user_id = message.from_user.id
     if message.text == ADMIN_PASSWORD:
         logger.info(f"Пользователь {user_id} успешно авторизовался в админ-панели.")
@@ -516,7 +505,6 @@ async def verify_admin_password(message: Message, state: FSMContext) -> None:
     "🚕 Order Taxi", "🕒 Order for Later"
 ]))
 async def start_taxi_order(message: Message, state: FSMContext) -> None:
-    """Начало процесса заказа такси (срочного или предварительного)."""
     user_id = message.from_user.id
     is_scheduled = 1 if "потом" in message.text or "Keyinga" in message.text or "Later" in message.text else 0
     logger.info(f"Пользователь {user_id} начал создание заказа (scheduled={is_scheduled}).")
@@ -531,7 +519,6 @@ async def start_taxi_order(message: Message, state: FSMContext) -> None:
 
 @router.message(OrderStates.waiting_for_pickup)
 async def process_order_pickup(message: Message, state: FSMContext) -> None:
-    """Получение адреса отправления."""
     await state.update_data(pickup=message.text)
     await message.answer("🏁 Укажите точный адрес назначения (куда едем):")
     await state.set_state(OrderStates.waiting_for_destination)
@@ -539,7 +526,6 @@ async def process_order_pickup(message: Message, state: FSMContext) -> None:
 
 @router.message(OrderStates.waiting_for_destination)
 async def process_order_destination(message: Message, state: FSMContext) -> None:
-    """Получение адреса назначения."""
     data = await state.get_data()
     await state.update_data(destination=message.text)
 
@@ -557,7 +543,6 @@ async def process_order_destination(message: Message, state: FSMContext) -> None
 
 @router.message(OrderStates.waiting_for_schedule_time)
 async def process_order_schedule_time(message: Message, state: FSMContext) -> None:
-    """Получение времени предварительного заказа."""
     await state.update_data(schedule_time=message.text)
     await message.answer("💬 Укажите комментарий для водителя (или напишите 'нет'):")
     await state.set_state(OrderStates.waiting_for_comment)
@@ -565,7 +550,6 @@ async def process_order_schedule_time(message: Message, state: FSMContext) -> No
 
 @router.message(OrderStates.waiting_for_comment)
 async def finalize_order_creation(message: Message, state: FSMContext) -> None:
-    """Финализация заказа, сохранение в БД и публикация в канал."""
     comment = message.text
     data = await state.get_data()
     passenger_id = message.from_user.id
@@ -596,7 +580,6 @@ async def finalize_order_creation(message: Message, state: FSMContext) -> None:
         order_id = cursor.lastrowid
         await db.commit()
 
-    # Кнопка отмены заказа пассажиром (пока водитель не принял)
     cancel_markup = InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -625,7 +608,6 @@ async def finalize_order_creation(message: Message, state: FSMContext) -> None:
         parse_mode="Markdown",
     )
 
-    # Авторассылка заказа в официальный канал @Yoldosh_Taxi_Official
     channel_markup = InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -656,7 +638,6 @@ async def finalize_order_creation(message: Message, state: FSMContext) -> None:
 
 @router.callback_query(F.data.startswith("cancel_order_"))
 async def passenger_cancel_order_handler(callback: CallbackQuery) -> None:
-    """Обработчик отмены заказа пассажиром до принятия водителем."""
     order_id = int(callback.data.split("_")[2])
     logger.info(f"Попытка отмены заказа #{order_id} пассажиром.")
 
@@ -684,7 +665,6 @@ async def passenger_cancel_order_handler(callback: CallbackQuery) -> None:
 
 @router.callback_query(F.data.startswith("accept_order_"))
 async def driver_accept_order_handler(callback: CallbackQuery) -> None:
-    """Обработчик принятия заказа водителем."""
     order_id = int(callback.data.split("_")[2])
     driver_id = callback.from_user.id
     logger.info(f"Водитель {driver_id} пытается принять заказ #{order_id}.")
@@ -712,7 +692,6 @@ async def driver_accept_order_handler(callback: CallbackQuery) -> None:
         f"✅ Вы успешно приняли заказ #{order_id}! Ожидаем геолокацию пассажира."
     )
 
-    # Запрос геопозиции у пассажира
     location_request_markup = ReplyKeyboardMarkup(
         keyboard=[
             [
@@ -738,7 +717,6 @@ async def driver_accept_order_handler(callback: CallbackQuery) -> None:
 
 @router.message(F.location)
 async def passenger_location_receiver(message: Message) -> None:
-    """Получение геопозиции пассажира, генерация ссылки на Яндекс Карты (rtext)."""
     passenger_id = message.from_user.id
     lat = message.location.latitude
     lon = message.location.longitude
@@ -758,7 +736,6 @@ async def passenger_location_receiver(message: Message) -> None:
                 )
                 await db.commit()
 
-                # Ссылка на Яндекс Карты с параметром rtext
                 yandex_maps_route_url = (
                     f"https://yandex.com/maps/?rtext=~{lat},{lon}&rtt=auto"
                 )
@@ -806,7 +783,6 @@ async def passenger_location_receiver(message: Message) -> None:
 
 @router.callback_query(F.data.startswith("trip_sos_"))
 async def trip_sos_handler(callback: CallbackQuery) -> None:
-    """Обработчик тревожной кнопки SOS (активна исключительно во время поездки)."""
     order_id = int(callback.data.split("_")[2])
     logger.warning(f"СРОЧНО! Нажата кнопка SOS по заказу #{order_id}!")
 
@@ -838,7 +814,6 @@ async def trip_sos_handler(callback: CallbackQuery) -> None:
 
 @router.callback_query(F.data.startswith("trip_finish_"))
 async def trip_finish_handler(callback: CallbackQuery) -> None:
-    """Завершение поездки водителем и запрос оценки у пассажира."""
     order_id = int(callback.data.split("_")[2])
     logger.info(f"Водитель завершает поездку по заказу #{order_id}")
 
@@ -889,7 +864,6 @@ async def trip_finish_handler(callback: CallbackQuery) -> None:
 
 @router.callback_query(F.data.startswith("rate_"))
 async def process_trip_rating(callback: CallbackQuery) -> None:
-    """Обработка оценки поездки. Если оценка < 2 звезд — уведомление админу."""
     parts = callback.data.split("_")
     order_id = int(parts[1])
     stars = int(parts[2])
@@ -918,7 +892,6 @@ async def process_trip_rating(callback: CallbackQuery) -> None:
     "💰 Top Up Balance"
 ]))
 async def driver_topup_balance_menu(message: Message, state: FSMContext) -> None:
-    """Инструкция по пополнению баланса водителя."""
     user_id = message.from_user.id
     logger.info(f"Водитель {user_id} запросил реквизиты для пополнения баланса.")
 
@@ -941,7 +914,6 @@ async def driver_topup_balance_menu(message: Message, state: FSMContext) -> None
 
 @router.message(DriverStates.waiting_for_receipt, F.photo)
 async def driver_receipt_photo_receiver(message: Message, state: FSMContext) -> None:
-    """Получение скриншота/чека пополнения и отправка на верификацию администратору."""
     photo_id = message.photo[-1].file_id
     driver_id = message.from_user.id
     logger.info(f"Получен чек пополнения баланса от водителя {driver_id}")
@@ -990,7 +962,6 @@ async def driver_receipt_photo_receiver(message: Message, state: FSMContext) -> 
     "📸 Verification"
 ]))
 async def driver_verification_menu(message: Message, state: FSMContext) -> None:
-    """Запрос документов для верификации водителя."""
     user_id = message.from_user.id
     logger.info(f"Водитель {user_id} открыл меню верификации.")
 
@@ -1013,7 +984,6 @@ async def driver_verification_menu(message: Message, state: FSMContext) -> None:
 
 @router.message(DriverStates.waiting_for_verification_photo, F.photo)
 async def driver_verification_photo_receiver(message: Message, state: FSMContext) -> None:
-    """Получение фото документов водителя и пересылка администратору."""
     photo_id = message.photo[-1].file_id
     driver_id = message.from_user.id
     logger.info(f"Получено фото документов для верификации от водителя {driver_id}")
@@ -1054,15 +1024,14 @@ async def driver_verification_photo_receiver(message: Message, state: FSMContext
 
 @router.callback_query(F.data.startswith("approve_driver_"))
 async def admin_approve_driver_callback(callback: CallbackQuery) -> None:
-    """Одобрение верификации водителя администратором."""
     driver_id = int(callback.data.split("_")[2])
     logger.info(f"Администратор одобрил верификацию для водителя {driver_id}")
 
     async with aiosqlite.connect(DB_NAME) as db:
-        await db.execute(
+        async with db.execute(
             "UPDATE users SET verified = 1 WHERE user_id = ?", (driver_id,)
-        )
-        await db.commit()
+        ) as cursor:
+            await db.commit()
 
     await callback.message.edit_caption(
         caption=callback.message.caption + "\n\n✅ **СТАТУС: ВЕРИФИЦИРОВАН**",
@@ -1084,7 +1053,6 @@ async def admin_approve_driver_callback(callback: CallbackQuery) -> None:
     "📋 Trip History"
 ]))
 async def show_trip_history_list(message: Message) -> None:
-    """Отображение истории поездок пользователя."""
     user_id = message.from_user.id
     logger.info(f"Пользователь {user_id} запросил историю поездок.")
 
@@ -1123,7 +1091,6 @@ async def show_trip_history_list(message: Message) -> None:
 
 @router.callback_query(F.data == "admin_promo_menu")
 async def admin_promo_step_one(callback: CallbackQuery, state: FSMContext) -> None:
-    """Начало создания промокода в админ-панели."""
     logger.info("Администратор инициировал создание промокода.")
     await callback.message.answer("🎟 Введите уникальный текстовый код для нового промокода:")
     await state.set_state(AdminStates.waiting_for_promo_code)
@@ -1131,7 +1098,6 @@ async def admin_promo_step_one(callback: CallbackQuery, state: FSMContext) -> No
 
 @router.message(AdminStates.waiting_for_promo_code)
 async def admin_promo_step_two(message: Message, state: FSMContext) -> None:
-    """Получение кода промокода."""
     await state.update_data(promo_code=message.text)
     await message.answer("💰 Введите номинал скидки по данному промокоду (например: 5000):")
     await state.set_state(AdminStates.waiting_for_promo_discount)
@@ -1139,7 +1105,6 @@ async def admin_promo_step_two(message: Message, state: FSMContext) -> None:
 
 @router.message(AdminStates.waiting_for_promo_discount)
 async def admin_promo_step_three(message: Message, state: FSMContext) -> None:
-    """Сохранение промокода в базу данных."""
     data = await state.get_data()
     code = data["promo_code"]
     discount = float(message.text)
@@ -1157,18 +1122,45 @@ async def admin_promo_step_three(message: Message, state: FSMContext) -> None:
 
 
 # =====================================================================
-# 15. ЗАПУСК ГЛАВНОГО АСИНХРОННОГО ЦИКЛА БОТА
+# 15. AIOHTTP СЕРВЕР ДЛЯ RENDER (УСТРАНЕНИЕ ОШИБКИ ДЕПЛОЯ)
+# =====================================================================
+
+async def handle_health_check(request: web.Request) -> web.Response:
+    """Простой хендлер для ответа на HTTP-запросы Render."""
+    return web.Response(text="Yo'ldosh Taxi Bot is running successfully!")
+
+
+async def start_web_server() -> web.AppRunner:
+    app = web.Application()
+    app.router.add_get("/", handle_health_check)
+    app.router.add_get("/health", handle_health_check)
+    
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", PORT)
+    await site.start()
+    logger.info(f"AIOHTTP веб-сервер успешно запущен на порту {PORT}")
+    return runner
+
+
+# =====================================================================
+# 16. ЗАПУСК ГЛАВНОГО АСИНХРОННОГО ЦИКЛА БОТА И СЕРВЕРА
 # =====================================================================
 
 async def main() -> None:
-    """Главная функция запуска бота с инициализацией БД и поллингом."""
     await init_db()
     dp.include_router(router)
-    logger.info("Бот Yo'ldosh Taxi успешно запущен и начал опрос Telegram API.")
     
-    # Удалим возможные вебхуки перед поллингом
+    # Запускаем локальный веб-сервер для Render, чтобы пройти Health Check
+    runner = await start_web_server()
+    
+    logger.info("Бот Yo'ldosh Taxi запущен и начал опрос Telegram API.")
     await bot.delete_webhook(drop_pending_updates=True)
-    await dp.start_polling(bot)
+    
+    try:
+        await dp.start_polling(bot)
+    finally:
+        await runner.cleanup()
 
 
 if __name__ == "__main__":
