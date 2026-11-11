@@ -348,7 +348,7 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
                 )
                 await message.answer(
                     f"🚖 Добро пожаловать в **Yo'ldosh Taxi**, {first_name}!\n\n"
-                    "Пожалуйста, нажмите кнопку ниже **или введите номер телефона вручную** (например: `+998901234567`):",
+                    "Pastagi tugmani bosing **yoki telefon raqamingizni ozingiz tering** (misol uchun: `+998 91 773-51-52`):",
                     reply_markup=phone_kb,
                     parse_mode="Markdown"
                 )
