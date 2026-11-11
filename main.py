@@ -340,7 +340,7 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
                 )
                 await db.commit()
                 
-                # Запросим номер телефона
+# Запросим номер телефона
                 phone_kb = ReplyKeyboardMarkup(
                     keyboard=[[KeyboardButton(text="📱 Поделиться контактом", request_contact=True)]],
                     resize_keyboard=True,
@@ -348,7 +348,7 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
                 )
                 await message.answer(
                     f"🚖 Добро пожаловать в **Yo'ldosh Taxi**, {first_name}!\n\n"
-                    "Пожалуйста, поделитесь вашим номером телефона для завершения регистрации:",
+                    "Пожалуйста, нажмите кнопку ниже **или введите номер телефона вручную** (например: `+998901234567`):",
                     reply_markup=phone_kb,
                     parse_mode="Markdown"
                 )
@@ -365,10 +365,20 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
     )
 
 
-@router.message(RegistrationStates.waiting_for_phone, F.contact)
+@router.message(RegistrationStates.waiting_for_phone, F.or_f(F.contact, F.text))
 async def process_user_contact(message: Message, state: FSMContext) -> None:
     user_id = message.from_user.id
-    phone = message.contact.phone_number
+
+    # Определяем: кнопка это или текст
+    if message.contact:
+        phone = message.contact.phone_number
+    else:
+        phone = message.text.strip()
+        # Простая проверка на корректность введенного текста
+        clean_phone = phone.replace("+", "").replace(" ", "").replace("-", "")
+        if not clean_phone.isdigit() or len(clean_phone) < 7:
+            await message.answer("⚠️ Неверный формат номера. Введите номер цифрами (например: `+998901234567`) или нажмите кнопку ниже.", parse_mode="Markdown")
+            return
 
     async with aiosqlite.connect(DB_NAME) as db:
         await db.execute(
@@ -389,7 +399,7 @@ async def process_user_contact(message: Message, state: FSMContext) -> None:
     await state.clear()
 
 
-@router.message(F.text == "🌐 Сменить язык / Jurnal")
+@router.message(F.text == "🌐 Сменить язык / Tilni tanlash")
 async def change_language_menu_btn(message: Message) -> None:
     await message.answer("🌐 Выберите язык / Tilni tanlang / Choose language:", reply_markup=get_language_keyboard())
 
