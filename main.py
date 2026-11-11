@@ -54,6 +54,7 @@ if not TOKEN:
     raise ValueError("ОШИБКА: Переменная окружения BOT_TOKEN не задана в настройках Render!")
 
 ADMIN_PASSWORD = "2009mmmm"
+ADMIN_ID = 7543501900
 CHANNEL_USERNAME = "@Yoldosh_Taxi_Official"
 PORT = int(os.getenv("PORT", 10000))
 
@@ -859,7 +860,7 @@ async def driver_receipt_receiver(message: Message, state: FSMContext) -> None:
         inline_keyboard=[[InlineKeyboardButton(text="✅ Подтвердить зачисление", callback_data=f"confirm_topup_{driver_id}")]]
     )
     await bot.send_photo(
-        CHANNEL_USERNAME,
+        ADMIN_ID,
         photo_id,
         caption=f"💳 **Запрос на пополнение баланса водителя**\nID водителя: `{driver_id}`",
         reply_markup=topup_kb,
@@ -907,7 +908,7 @@ async def driver_verification_receiver(message: Message, state: FSMContext) -> N
         inline_keyboard=[[InlineKeyboardButton(text="✅ Подтвердить верификацию", callback_data=f"approve_driver_{driver_id}")]]
     )
     await bot.send_photo(
-        CHANNEL_USERNAME,
+        ADMIN_ID,
         photo_id,
         caption=f"📸 **Запрос на верификацию водителя**\nID водителя: `{driver_id}`",
         reply_markup=verif_kb,
