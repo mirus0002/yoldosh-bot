@@ -342,12 +342,12 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
                 
 # Запросим номер телефона
                 phone_kb = ReplyKeyboardMarkup(
-                    keyboard=[[KeyboardButton(text="📱 Поделиться контактом", request_contact=True)]],
+                    keyboard=[[KeyboardButton(text="📱 Kontakt bilan bolishish ", request_contact=True)]],
                     resize_keyboard=True,
                     one_time_keyboard=True
                 )
                 await message.answer(
-                    f"🚖 Добро пожаловать в **Yo'ldosh Taxi**, {first_name}!\n\n"
+                    f"**yo'ldosh taxiga hush kelipsiz**, {first_name}!\n\n"
                     "Pastagi tugmani bosing **yoki telefon raqamingizni ozingiz tering** (misol uchun: `+998 91 773-51-52`):",
                     reply_markup=phone_kb,
                     parse_mode="Markdown"
