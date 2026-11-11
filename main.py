@@ -365,21 +365,36 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
     )
 
 
-@router.message(RegistrationStates.waiting_for_phone, F.or_f(F.contact, F.text))
-async def process_user_contact(message: Message, state: FSMContext) -> None:
+@router.message(RegistrationStates.waiting_for_phone, F.contact)
+async def process_user_contact_button(message: Message, state: FSMContext) -> None:
     user_id = message.from_user.id
+    phone = message.contact.phone_number
 
-    # Определяем: кнопка это или текст
-    if message.contact:
-        phone = message.contact.phone_number
-    else:
-        phone = message.text.strip()
-        # Простая проверка на корректность введенного текста
-        clean_phone = phone.replace("+", "").replace(" ", "").replace("-", "")
-        if not clean_phone.isdigit() or len(clean_phone) < 7:
-            await message.answer("⚠️ Неверный формат номера. Введите номер цифрами (например: `+998901234567`) или нажмите кнопку ниже.", parse_mode="Markdown")
-            return
+    async with aiosqlite.connect(DB_NAME) as db:
+        await db.execute(
+            "UPDATE users SET phone = ? WHERE user_id = ?", (phone, user_id)
+        )
+        async with db.execute(
+            "SELECT role, lang FROM users WHERE user_id = ?", (user_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            role, lang = row if row else ("passenger", "ru")
+        await db.commit()
 
+    t = LANGS.get(lang, LANGS["ru"])
+    await message.answer(
+        "✅ Регистрация успешно завершена!",
+        reply_markup=get_main_menu(role, lang)
+    )
+    await state.clear()
+
+
+@router.message(RegistrationStates.waiting_for_phone, F.text)
+async def process_user_contact_text(message: Message, state: FSMContext) -> None:
+    user_id = message.from_user.id
+    phone = message.text.strip()
+
+    # Сохраняем введенный текст как номер телефона без лишних блокировок
     async with aiosqlite.connect(DB_NAME) as db:
         await db.execute(
             "UPDATE users SET phone = ? WHERE user_id = ?", (phone, user_id)
