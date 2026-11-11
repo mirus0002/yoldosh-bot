@@ -599,7 +599,7 @@ async def process_order_schedule_time(message: Message, state: FSMContext) -> No
 
 
 @router.message(OrderStates.waiting_for_comment)
-async def (message: Message, state: FSMContext) -> None:
+async def finalize_order_creation(message: Message, state: FSMContext) -> None:
     comment = message.text
     data = await state.get_data()
     passenger_id = message.from_user.id
