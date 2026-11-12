@@ -368,7 +368,7 @@ def get_main_menu(role: str = "passenger", lang: str = "ru") -> ReplyKeyboardMar
                     KeyboardButton(text=t["topup"]),
                 ],
                 [
-                    KeyboardButton(text=t["profile"]),,
+                    KeyboardButton(text=t["profile"]),
                     KeyboardButton(text=t["balance"]),
                 ],
                 [
