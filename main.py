@@ -203,6 +203,7 @@ async def init_db() -> None:
                 lang TEXT DEFAULT 'ru',
                 first_name TEXT,
                 last_name TEXT,
+                age INTEGER,
                 phone TEXT,
                 balance REAL DEFAULT 0.0,
                 verified INTEGER DEFAULT 0,
@@ -210,7 +211,6 @@ async def init_db() -> None:
                 created_at TEXT
             )
         """)
-
         await db.execute("""
             CREATE TABLE IF NOT EXISTS orders (
                 order_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -225,7 +225,6 @@ async def init_db() -> None:
                 created_at TEXT
             )
         """)
-
         await db.execute("""
             CREATE TABLE IF NOT EXISTS promos (
                 code TEXT PRIMARY KEY,
