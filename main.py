@@ -266,7 +266,96 @@ class RegistrationStates(StatesGroup):
 
 
 # =====================================================================
-# ХЕНДЛЕРЫ РЕГИСТРАЦИИ
+# ШАГ 1: КОМАНДА /START (ПРОВЕРКА ЯЗЫКА И БАЗЫ)
+# =====================================================================
+
+@router.message(Command("start"))
+async def cmd_start(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    user_id = message.from_user.id
+    
+    # Проверяем, есть ли пользователь в базе и выбран ли у него язык
+    async with aiosqlite.connect(DB_NAME) as db:
+        async with db.execute("SELECT lang, first_name FROM users WHERE user_id = ?", (user_id,)) as cursor:
+            row = await cursor.fetchone()
+            
+    # Если пользователя нет в базе или у него не выбран язык — просим выбрать язык
+    if not row or not row[0]:
+        lang_kb = InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text="🇺🇿 O'zbekcha", callback_data="lang_uz"),
+                InlineKeyboardButton(text="🇷🇺 Русский", callback_data="lang_ru"),
+                InlineKeyboardButton(text="🇬🇧 English", callback_data="lang_en")
+            ]
+        ])
+        await message.answer(
+            "Assalomu alaykum! Iltimos, tilni tanlang:\n\n"
+            "Здравствуйте! Пожалуйста, выберите язык:\n\n"
+            "Hello! Please select a language:",
+            reply_markup=lang_kb
+        )
+        return
+
+    # Если язык есть, но не введено имя (не закончена регистрация) -> запускаем регистрацию
+    if not row[1]:
+        await start_registration(message, state)
+        return
+
+    # Если пользователь полностью зарегистрирован -> открываем главное меню
+    lang = row[0]
+    async with aiosqlite.connect(DB_NAME) as db:
+        async with db.execute("SELECT role FROM users WHERE user_id = ?", (user_id,)) as cursor:
+            role_row = await cursor.fetchone()
+            role = role_row[0] if role_row else "passenger"
+
+    if lang == "uz":
+        welcome_text = "Asosiy menyuga xush kelibsiz! 🎉"
+    elif lang == "en":
+        welcome_text = "Welcome to the main menu! 🎉"
+    else:
+        welcome_text = "Добро пожаловать в главное меню! 🎉"
+        
+    await message.answer(welcome_text, reply_markup=get_main_menu(role, lang))
+
+
+# =====================================================================
+# ШАГ 2: ОБРАБОТКА ВЫБОРА ЯЗЫКА И ЗАПУСК РЕГИСТРАЦИИ
+# =====================================================================
+
+@router.callback_query(F.data.startswith("lang_"))
+async def process_language_selection(callback: CallbackQuery, state: FSMContext) -> None:
+    selected_lang = callback.data.split("_")[1] # 'uz', 'ru' или 'en'
+    user_id = callback.from_user.id
+    
+    # Сохраняем язык в базу данных
+    async with aiosqlite.connect(DB_NAME) as db:
+        async with db.execute(
+            """
+            INSERT INTO users (user_id, lang, role, balance, created_at) 
+            VALUES (?, ?, 'passenger', 0.0, datetime('now'))
+            ON CONFLICT(user_id) DO UPDATE SET lang = ?
+            """,
+            (user_id, selected_lang, selected_lang)
+        )
+        await db.commit()
+        
+    await callback.message.delete()
+    
+    # Запускаем ввод имени на выбранном языке
+    await state.set_state(RegistrationStates.waiting_for_full_name)
+    
+    if selected_lang == "uz":
+        text = "📝 **Ro'yxatdan o'tish**\n\nIltimos, **Ism va Familiyangizni** kiriting:"
+    elif selected_lang == "en":
+        text = "📝 **Registration**\n\nPlease enter your **First and Last Name**:"
+    else:
+        text = "📝 **Регистрация в системе**\n\nПожалуйста, введите ваши **Имя и Фамилию**:"
+    
+    await callback.message.answer(text, parse_mode="Markdown")
+
+
+# =====================================================================
+# ХЕНДЛЕРЫ РЕГИСТРАЦИИ (ИМЯ -> ВОЗРАСТ -> ТЕЛЕФОН)
 # =====================================================================
 
 async def start_registration(message: Message, state: FSMContext) -> None:
@@ -332,12 +421,11 @@ async def save_user_and_finish(message: Message, state: FSMContext, phone: str) 
     async with aiosqlite.connect(DB_NAME) as db:
         await db.execute(
             """
-            INSERT OR REPLACE INTO users (user_id, first_name, last_name, age, phone, role, balance, lang)
-            VALUES (?, ?, ?, ?, ?, COALESCE((SELECT role FROM users WHERE user_id = ?), 'passenger'), 
-                    COALESCE((SELECT balance FROM users WHERE user_id = ?), 0.0), 
-                    COALESCE((SELECT lang FROM users WHERE user_id = ?), 'ru'))
+            UPDATE users 
+            SET first_name = ?, last_name = ?, age = ?, phone = ? 
+            WHERE user_id = ?
             """,
-            (user_id, first_name, last_name, age, phone, user_id, user_id, user_id)
+            (first_name, last_name, age, phone, user_id)
         )
         
         async with db.execute("SELECT role, lang FROM users WHERE user_id = ?", (user_id,)) as cursor:
@@ -345,8 +433,15 @@ async def save_user_and_finish(message: Message, state: FSMContext, phone: str) 
             role, lang = row if row else ("passenger", "ru")
         await db.commit()
 
+    if lang == "uz":
+        success_text = "✅ **Ro'yxatdan o'tish muvaffaqiyatli yakunlandi!** Tizimga xush kelibsiz."
+    elif lang == "en":
+        success_text = "✅ **Registration successfully completed!** Welcome to the system."
+    else:
+        success_text = "✅ **Регистрация успешно завершена!** Добро пожаловать в систему."
+
     await message.answer(
-        "✅ **Регистрация успешно завершена!** Добро пожаловать в систему.",
+        success_text,
         reply_markup=get_main_menu(role, lang),
         parse_mode="Markdown"
     )
@@ -416,11 +511,12 @@ def get_language_keyboard() -> InlineKeyboardMarkup:
 
 
 # =====================================================================
-# 6. СТАРТ И РЕГИСТРАЦИЯ КОНТАКТА
+# 6. СТАРТ И ВЫБОР ЯЗЫКА / РЕГИСТРАЦИЯ
 # =====================================================================
 
 @router.message(Command("start"))
 async def cmd_start(message: Message, state: FSMContext) -> None:
+    await state.clear()
     user_id = message.from_user.id
     first_name = message.from_user.first_name or "Не указано"
     last_name = message.from_user.last_name or ""
@@ -431,37 +527,121 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
             "SELECT role, lang, phone FROM users WHERE user_id = ?", (user_id,)
         ) as cursor:
             row = await cursor.fetchone()
+            
+            # 1. Если пользователя вообще нет в базе — создаем запись БЕЗ языка и просим выбрать язык
             if not row:
                 await db.execute(
                     "INSERT INTO users (user_id, role, lang, first_name, last_name, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-                    (user_id, "passenger", "ru", first_name, last_name, now),
+                    (user_id, "passenger", None, first_name, last_name, now),
                 )
                 await db.commit()
                 
-# Запросим номер телефона
+                # Показываем выбор языка (узбекский, русский, английский)
+                await message.answer(
+                    "Assalomu alaykum! Iltimos, tilni tanlang:\n\n"
+                    "Здравствуйте! Пожалуйста, выберите язык:\n\n"
+                    "Hello! Please select a language:",
+                    reply_markup=get_language_keyboard()
+                )
+                return
+            
+            role, lang, phone = row
+
+            # 2. Если язык еще не выбран — снова показываем кнопки выбора языка
+            if not lang:
+                await message.answer(
+                    "Assalomu alaykum! Iltimos, tilni tanlang:\n\n"
+                    "Здравствуйте! Пожалуйста, выберите язык:\n\n"
+                    "Hello! Please select a language:",
+                    reply_markup=get_language_keyboard()
+                )
+                return
+
+            # 3. Если язык есть, но не указан телефон (регистрация не завершена) — просим телефон
+            if not phone:
                 phone_kb = ReplyKeyboardMarkup(
-                    keyboard=[[KeyboardButton(text="📱 Kontakt bilan bolishish ", request_contact=True)]],
+                    keyboard=[[KeyboardButton(text="📱 Kontakt bilan bo'lishish", request_contact=True)]],
                     resize_keyboard=True,
                     one_time_keyboard=True
                 )
                 await message.answer(
-                    f"**yo'ldosh taxiga hush kelipsiz**, {first_name}!\n\n"
-                    "Pastagi tugmani bosing **yoki telefon raqamingizni ozingiz tering** (misol uchun: `+998 91 773-51-52`):",
+                    f"**Yo'ldosh taxiga xush kelibsiz**, {first_name}!\n\n"
+                    "Pastdagi tugmani bosing **yoki telefon raqamingizni o'zingiz tering** (misol uchun: `+998 91 773-51-52`):",
                     reply_markup=phone_kb,
                     parse_mode="Markdown"
                 )
                 await state.set_state(RegistrationStates.waiting_for_phone)
                 return
-            else:
-                role, lang, phone = row
 
-    t = LANGS.get(lang, LANGS["ru"])
-    await message.answer(
-        f"{t['welcome']}\n\n{t['choose_action']}",
-        reply_markup=get_main_menu(role, lang),
-        parse_mode="Markdown",
-    )
+            # 4. Если пользователь полностью зарегистрирован — открываем главное меню на его языке
+            t = LANGS.get(lang, LANGS["ru"])
+            await message.answer(
+                f"{t['welcome']}\n\n{t['choose_action']}",
+                reply_markup=get_main_menu(role, lang),
+                parse_mode="Markdown",
+            )
 
+
+# =====================================================================
+# ОБРАБОТКА ВЫБОРА ЯЗЫКА (КНОПКИ)
+# =====================================================================
+
+@router.callback_query(F.data.startswith("lang_"))
+async def process_language_callback(callback: CallbackQuery, state: FSMContext) -> None:
+    selected_lang = callback.data.split("_")[1] # 'uz', 'ru' или 'en'
+    user_id = callback.from_user.id
+    
+    # Сохраняем выбранный язык в базу
+    async with aiosqlite.connect(DB_NAME) as db:
+        await db.execute(
+            "UPDATE users SET lang = ? WHERE user_id = ?",
+            (selected_lang, user_id)
+        )
+        await db.commit()
+        
+        # Проверяем, есть ли уже номер телефона у пользователя
+        async with db.execute("SELECT phone FROM users WHERE user_id = ?", (user_id,)) as cursor:
+            p_row = await cursor.fetchone()
+            has_phone = p_row[0] if p_row else None
+
+    await callback.message.delete()
+    
+    # Если телефон еще не привязан — переводим к запросу телефона на выбранном языке
+    if not has_phone:
+        phone_kb = ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="📱 Kontakt bilan bo'lishish" if selected_lang == "uz" else "📱 Поделиться контактом", request_contact=True)]],
+            resize_keyboard=True,
+            one_time_keyboard=True
+        )
+        
+        prompt_text = {
+            "uz": "Iltimos, telefon raqamingizni yuboring:",
+            "en": "Please send your phone number:",
+            "ru": "Пожалуйста, отправьте ваш номер телефона:"
+        }
+        
+        await callback.message.answer(
+            prompt_text.get(selected_lang, prompt_text["ru"]),
+            reply_markup=phone_kb
+        )
+        await state.set_state(RegistrationStates.waiting_for_phone)
+    else:
+        # Если телефон уже есть — открываем главное меню
+        async with aiosqlite.connect(DB_NAME) as db:
+            async with db.execute("SELECT role FROM users WHERE user_id = ?", (user_id,)) as cursor:
+                r_row = await cursor.fetchone()
+                role = r_row[0] if r_row else "passenger"
+                
+        t = LANGS.get(selected_lang, LANGS["ru"])
+        await callback.message.answer(
+            t["lang_changed"],
+            reply_markup=get_main_menu(role, selected_lang)
+        )
+
+
+# =====================================================================
+# СОХРАНЕНИЕ КОНТАКТА
+# =====================================================================
 
 @router.message(RegistrationStates.waiting_for_phone, F.contact)
 async def process_user_contact_button(message: Message, state: FSMContext) -> None:
@@ -480,8 +660,15 @@ async def process_user_contact_button(message: Message, state: FSMContext) -> No
         await db.commit()
 
     t = LANGS.get(lang, LANGS["ru"])
+    
+    success_text = {
+        "uz": "✅ Ro'yxatdan o'tish muvaffaqiyatli yakunlandi!",
+        "en": "✅ Registration successfully completed!",
+        "ru": "✅ Регистрация успешно завершена!"
+    }
+
     await message.answer(
-        "✅ Регистрация успешно завершена!",
+        success_text.get(lang, success_text["ru"]),
         reply_markup=get_main_menu(role, lang)
     )
     await state.clear()
