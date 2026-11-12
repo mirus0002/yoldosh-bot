@@ -388,6 +388,53 @@ async def process_user_contact_button(message: Message, state: FSMContext) -> No
     )
     await state.clear()
 
+@router.message(F.text.in_(["📜 История поездок", "📜 Safarlar tarixi", "История поездок", "Safarlar tarixi"]))
+async def show_trip_history(message: Message) -> None:
+    user_id = message.from_user.id
+
+    async with aiosqlite.connect(DB_NAME) as db:
+        # Ищем заказы, где пользователь был пассажиром или водителем
+        async with db.execute(
+            """
+            SELECT order_id, pickup, destination, status, created_at 
+            FROM orders 
+            WHERE passenger_id = ? OR driver_id = ? 
+            ORDER BY order_id DESC LIMIT 5
+            """,
+            (user_id, user_id)
+        ) as cursor:
+            rows = await cursor.fetchall()
+
+    if not rows:
+        await message.answer(
+            "📭 У вас пока нет истории поездок.\n\n📭 Sizda hali safarlar tarixi yo'q.",
+            parse_mode="Markdown"
+        )
+        return
+
+    text = "📜 **История ваших последних поездок:**\n\n"
+    for row in rows:
+        order_id, pickup, destination, status, created_at = row
+        
+        # Переводим статус на понятный язык
+        status_text = {
+            "pending": "⏳ В поиске / Qidiruvda",
+            "accepted": "🚗 Принят / Qabul qilingan",
+            "completed": "✅ Завершен / Yakunlangan",
+            "cancelled": "❌ Отменен / Bekor qilingan"
+        }.get(status, status)
+
+        text += (
+            f"🆔 **Заказ #{order_id}**\n"
+            f"📌 Статус: {status_text}\n"
+            f"📍 Откуда: {pickup}\n"
+            f"🏁 Куда: {destination}\n"
+            f"🕒 Дата: {created_at}\n"
+            f"----------------------------------\n"
+        )
+
+    await message.answer(text, parse_mode="Markdown")
+
 
 @router.message(RegistrationStates.waiting_for_phone, F.text)
 async def process_user_contact_text(message: Message, state: FSMContext) -> None:
