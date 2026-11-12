@@ -388,11 +388,7 @@ async def process_user_contact_button(message: Message, state: FSMContext) -> No
     )
     await state.clear()
 
-@router.message(F.text.in_(["📜 История поездок", "📜 Safarlar tarixi", "История поездок", "Safarlar tarixi"]))
-async def show_trip_history(message: Message) -> None:
- import re
-
-@router.message(F.text.regexp(r"(история|safarlar|tarixi)", re.IGNORECASE))
+@router.message(F.text.func(lambda text: text and any(word in text.lower() for word in ["история", "safarlar", "tarixi"])))
 async def show_trip_history(message: Message) -> None:
     user_id = message.from_user.id
 
