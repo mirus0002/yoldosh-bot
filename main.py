@@ -390,6 +390,10 @@ async def process_user_contact_button(message: Message, state: FSMContext) -> No
 
 @router.message(F.text.in_(["📜 История поездок", "📜 Safarlar tarixi", "История поездок", "Safarlar tarixi"]))
 async def show_trip_history(message: Message) -> None:
+ import re
+
+@router.message(F.text.regexp(r"(история|safarlar|tarixi)", re.IGNORECASE))
+async def show_trip_history(message: Message) -> None:
     user_id = message.from_user.id
 
     async with aiosqlite.connect(DB_NAME) as db:
