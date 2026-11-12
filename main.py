@@ -86,6 +86,7 @@ LANGS: Dict[str, Dict[str, str]] = {
         "history": "📋 История поездок",
         "profile": "👤 Мой профиль",
         "topup": "💰 Пополнить баланс",
+        "balance": "💳 Мой баланс",
         "verification": "📸 Верификация",
         "free_orders": "🚖 Свободные заказы",
         "lang_changed": "🇷🇺 Язык успешно изменен на русский!",
@@ -124,6 +125,7 @@ LANGS: Dict[str, Dict[str, str]] = {
         "history": "📋 Safarlar tarixi",
         "profile": "👤 Mening profilim",
         "topup": "💰 Balansni to'ldirish",
+        "balance": "💳 Mening balansim",
         "verification": "📸 Verifikatsiya",
         "free_orders": "🚖 Bo'sh buyurtmalar",
         "lang_changed": "🇺🇿 Til muvaffaqiyatli o'zbek tiliga o'zgartirildi!",
@@ -161,6 +163,7 @@ LANGS: Dict[str, Dict[str, str]] = {
         "history": "📋 Trip History",
         "profile": "👤 My Profile",
         "topup": "💰 Top Up Balance",
+        "balance": "💳 My Balance",
         "verification": "📸 Verification",
         "free_orders": "🚖 Free Orders",
         "lang_changed": "🇬🇧 Language successfully changed to English!",
@@ -258,7 +261,97 @@ class AdminStates(StatesGroup):
 
 
 class RegistrationStates(StatesGroup):
+    waiting_for_full_name = State()
+    waiting_for_age = State()
     waiting_for_phone = State()
+
+
+# =====================================================================
+# ХЕНДЛЕРЫ РЕГИСТРАЦИИ
+# =====================================================================
+
+async def start_registration(message: Message, state: FSMContext) -> None:
+    await state.set_state(RegistrationStates.waiting_for_full_name)
+    await message.answer(
+        "📝 **Регистрация в системе**\n\nПожалуйста, введите ваши **Имя и Фамилию**:",
+        parse_mode="Markdown"
+    )
+
+@router.message(RegistrationStates.waiting_for_full_name, F.text)
+async def process_full_name(message: Message, state: FSMContext) -> None:
+    full_name_parts = message.text.strip().split(maxsplit=1)
+    first_name = full_name_parts[0]
+    last_name = full_name_parts[1] if len(full_name_parts) > 1 else ""
+
+    await state.update_data(first_name=first_name, last_name=last_name)
+    await state.set_state(RegistrationStates.waiting_for_age)
+    
+    await message.answer(
+        "🔢 Укажите ваш **возраст** цифрами (например: `25`):",
+        parse_mode="Markdown"
+    )
+
+@router.message(RegistrationStates.waiting_for_age, F.text)
+async def process_age(message: Message, state: FSMContext) -> None:
+    if not message.text.isdigit():
+        await message.answer("⚠️ Пожалуйста, введите возраст цифрами (например: `20`):")
+        return
+
+    age = int(message.text)
+    await state.update_data(age=age)
+    await state.set_state(RegistrationStates.waiting_for_phone)
+
+    phone_kb = ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="📱 Поделиться контактом", request_contact=True)]],
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )
+
+    await message.answer(
+        "📞 Теперь отправьте ваш **номер телефона**, нажав на кнопку ниже или написав его вручную:",
+        reply_markup=phone_kb,
+        parse_mode="Markdown"
+    )
+
+@router.message(RegistrationStates.waiting_for_phone, F.contact)
+async def process_phone_contact(message: Message, state: FSMContext) -> None:
+    phone = message.contact.phone_number
+    await save_user_and_finish(message, state, phone)
+
+@router.message(RegistrationStates.waiting_for_phone, F.text)
+async def process_phone_text(message: Message, state: FSMContext) -> None:
+    phone = message.text.strip()
+    await save_user_and_finish(message, state, phone)
+
+async def save_user_and_finish(message: Message, state: FSMContext, phone: str) -> None:
+    user_id = message.from_user.id
+    data = await state.get_data()
+    first_name = data.get("first_name", "")
+    last_name = data.get("last_name", "")
+    age = data.get("age", 0)
+
+    async with aiosqlite.connect(DB_NAME) as db:
+        await db.execute(
+            """
+            INSERT OR REPLACE INTO users (user_id, first_name, last_name, age, phone, role, balance, lang)
+            VALUES (?, ?, ?, ?, ?, COALESCE((SELECT role FROM users WHERE user_id = ?), 'passenger'), 
+                    COALESCE((SELECT balance FROM users WHERE user_id = ?), 0.0), 
+                    COALESCE((SELECT lang FROM users WHERE user_id = ?), 'ru'))
+            """,
+            (user_id, first_name, last_name, age, phone, user_id, user_id, user_id)
+        )
+        
+        async with db.execute("SELECT role, lang FROM users WHERE user_id = ?", (user_id,)) as cursor:
+            row = await cursor.fetchone()
+            role, lang = row if row else ("passenger", "ru")
+        await db.commit()
+
+    await message.answer(
+        "✅ **Регистрация успешно завершена!** Добро пожаловать в систему.",
+        reply_markup=get_main_menu(role, lang),
+        parse_mode="Markdown"
+    )
+    await state.clear()
 
 
 # =====================================================================
@@ -275,11 +368,14 @@ def get_main_menu(role: str = "passenger", lang: str = "ru") -> ReplyKeyboardMar
                     KeyboardButton(text=t["topup"]),
                 ],
                 [
-                    KeyboardButton(text=t["profile"]),
-                    KeyboardButton(text=t["verification"]),
+                    KeyboardButton(text=t["profile"]),,
+                    KeyboardButton(text=t["balance"]),
                 ],
                 [
+                    KeyboardButton(text=t["verification"]),
                     KeyboardButton(text=t["history"]),
+                ],
+                [
                     KeyboardButton(text="🌐 Сменить язык / Jurnal")
                 ],
             ],
@@ -294,10 +390,13 @@ def get_main_menu(role: str = "passenger", lang: str = "ru") -> ReplyKeyboardMar
                 ],
                 [
                     KeyboardButton(text=t["profile"]),
-                    KeyboardButton(text=t["history"]),
+                    KeyboardButton(text=t["balance"]),
                 ],
                 [
+                    KeyboardButton(text=t["history"]),
                     KeyboardButton(text=t["become_driver"]),
+                ],
+                [
                     KeyboardButton(text="🌐 Сменить язык / Jurnal")
                 ],
             ],
@@ -956,20 +1055,29 @@ async def driver_receipt_receiver(message: Message, state: FSMContext) -> None:
     topup_kb = InlineKeyboardMarkup(
         inline_keyboard=[[InlineKeyboardButton(text="✅ Подтвердить зачисление", callback_data=f"confirm_topup_{driver_id}")]]
     )
-    await bot.send_photo(
-        ADMIN_ID,
-        photo_id,
-        caption=f"💳 **Запрос на пополнение баланса водителя**\nID водителя: `{driver_id}`",
-        reply_markup=topup_kb,
-        parse_mode="Markdown",
-    )
+    
+    try:
+        await bot.send_photo(
+            ADMIN_ID,
+            photo_id,
+            caption=f"💳 **Запрос на пополнение баланса водителя**\nID водителя: `{driver_id}`",
+            reply_markup=topup_kb,
+            parse_mode="Markdown",
+        )
+    except Exception as e:
+        logger.error(f"Не удалось отправить чек админу: {e}")
 
     async with aiosqlite.connect(DB_NAME) as db:
         async with db.execute("SELECT lang FROM users WHERE user_id = ?", (driver_id,)) as cursor:
             row = await cursor.fetchone()
-            lang = row[0] if row else "ru"
+            lang = row[0] if row and row[0] in ["ru", "uz"] else "ru"
 
-    await message.answer("✅ Чек успешно отправлен администратору на проверку!", reply_markup=get_main_menu("driver", lang))
+    msg_text = (
+        "✅ Chek tekshirish uchun administratorga yuborildi!"
+        if lang == "uz"
+        else "✅ Чек успешно отправлен администратору на проверку!"
+    )
+    await message.answer(msg_text, reply_markup=get_main_menu("driver", lang))
     await state.clear()
 
 
@@ -1061,6 +1169,62 @@ async def admin_promo_step_three(message: Message, state: FSMContext) -> None:
 
     await message.answer(f"✅ Промокод `{code}` на скидку `{discount} сум` создан!")
     await state.clear()
+
+
+# =====================================================================
+# ХЕНДЛЕР КНОПКИ СМЕНИ ЯЗЫКА
+# =====================================================================
+
+@router.message(F.text.func(lambda text: text and "сменить язык" in text.lower()))
+async def change_language_request(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    
+    if "uz" in message.text.lower():
+        await message.answer(
+            "Iltimos, yangi tilni tanlang:",
+            reply_markup=get_language_keyboard()
+        )
+    else:
+        await message.answer(
+            "Пожалуйста, выберите новый язык:",
+            reply_markup=get_language_keyboard()
+        )
+
+
+# =====================================================================
+# ХЕНДЛЕР КНОПКИ БАЛАНСА
+# =====================================================================
+
+@router.message(F.text.func(lambda text: text in ["💳 Мой баланс", "💳 Mening balansim", "💳 My Balance"]))
+async def show_balance(message: Message) -> None:
+    user_id = message.from_user.id
+
+    async with aiosqlite.connect(DB_NAME) as db:
+        async with db.execute("SELECT balance, lang FROM users WHERE user_id = ?", (user_id,)) as cursor:
+            row = await cursor.fetchone()
+
+    if not row:
+        await message.answer("⚠️ User not found / Пользователь не найден / Foydalanuvchi topilmadi.")
+        return
+
+    balance, lang = row
+    current_balance = balance if balance is not None else 0.0
+
+    if lang == "uz":
+        await message.answer(
+            f"💳 **Sizning hisobingizdagi balans:** `{current_balance:,.2f}` so'm",
+            parse_mode="Markdown"
+        )
+    elif lang == "en":
+        await message.answer(
+            f"💳 **Your current balance:** `{current_balance:,.2f}` UZS",
+            parse_mode="Markdown"
+        )
+    else:
+        await message.answer(
+            f"💳 **Ваш текущий баланс:** `{current_balance:,.2f}` сум",
+            parse_mode="Markdown"
+        )
 
 
 # =====================================================================
