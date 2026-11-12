@@ -393,7 +393,12 @@ async def show_trip_history(message: Message) -> None:
     user_id = message.from_user.id
 
     async with aiosqlite.connect(DB_NAME) as db:
-        # Ищем заказы, где пользователь был пассажиром или водителем
+        # Узнаем выбранный язык пользователя из базы данных
+        async with db.execute("SELECT lang FROM users WHERE user_id = ?", (user_id,)) as cursor:
+            user_lang = await cursor.fetchone()
+            lang = user_lang[0] if user_lang and user_lang[0] in ["ru", "uz"] else "ru"
+
+        # Ищем заказы
         async with db.execute(
             """
             SELECT order_id, pickup, destination, status, created_at 
@@ -406,32 +411,52 @@ async def show_trip_history(message: Message) -> None:
             rows = await cursor.fetchall()
 
     if not rows:
-        await message.answer(
-            "📭 У вас пока нет истории поездок.\n\n📭 Sizda hali safarlar tarixi yo'q.",
-            parse_mode="Markdown"
-        )
+        if lang == "uz":
+            await message.answer("📭 Sizda hali safarlar tarixi yo'q.")
+        else:
+            await message.answer("📭 У вас пока нет истории поездок.")
         return
 
-    text = "📜 **История ваших последних поездок:**\n\n"
+    if lang == "uz":
+        text = "📜 **Sizning oxirgi safarlaringiz tarixi:**\n\n"
+    else:
+        text = "📜 **История ваших последних поездок:**\n\n"
+
     for row in rows:
         order_id, pickup, destination, status, created_at = row
         
-        # Переводим статус на понятный язык
-        status_text = {
-            "pending": "⏳ В поиске / Qidiruvda",
-            "accepted": "🚗 Принят / Qabul qilingan",
-            "completed": "✅ Завершен / Yakunlangan",
-            "cancelled": "❌ Отменен / Bekor qilingan"
-        }.get(status, status)
+        if lang == "uz":
+            status_text = {
+                "pending": "⏳ Qidiruvda",
+                "accepted": "🚗 Qabul qilingan",
+                "completed": "✅ Yakunlangan",
+                "cancelled": "❌ Bekor qilingan"
+            }.get(status, status)
 
-        text += (
-            f"🆔 **Заказ #{order_id}**\n"
-            f"📌 Статус: {status_text}\n"
-            f"📍 Откуда: {pickup}\n"
-            f"🏁 Куда: {destination}\n"
-            f"🕒 Дата: {created_at}\n"
-            f"----------------------------------\n"
-        )
+            text += (
+                f"🆔 **Buyurtma #{order_id}**\n"
+                f"📌 Holati: {status_text}\n"
+                f"📍 Qayerdan: {pickup}\n"
+                f"🏁 Qayerga: {destination}\n"
+                f"🕒 Sana: {created_at}\n"
+                f"----------------------------------\n"
+            )
+        else:
+            status_text = {
+                "pending": "⏳ В поиске",
+                "accepted": "🚗 Принят",
+                "completed": "✅ Завершен",
+                "cancelled": "❌ Отменен"
+            }.get(status, status)
+
+            text += (
+                f"🆔 **Заказ #{order_id}**\n"
+                f"📌 Статус: {status_text}\n"
+                f"📍 Откуда: {pickup}\n"
+                f"🏁 Куда: {destination}\n"
+                f"🕒 Дата: {created_at}\n"
+                f"----------------------------------\n"
+            )
 
     await message.answer(text, parse_mode="Markdown")
 
