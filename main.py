@@ -329,12 +329,8 @@ async def process_language_selection(callback: CallbackQuery, state: FSMContext)
     
     # Сохраняем язык в базу данных
     async with aiosqlite.connect(DB_NAME) as db:
-        async with db.execute(
-            """
-            INSERT INTO users (user_id, lang, role, balance, created_at) 
-            VALUES (?, ?, 'passenger', 0.0, datetime('now'))
-            ON CONFLICT(user_id) DO UPDATE SET lang = ?
-            """,
+        await db.execute(
+            "INSERT INTO users (user_id, lang, role, balance, created_at) VALUES (?, ?, 'passenger', 0.0, datetime('now')) ON CONFLICT(user_id) DO UPDATE SET lang = ?",
             (user_id, selected_lang, selected_lang)
         )
         await db.commit()
