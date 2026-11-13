@@ -587,52 +587,45 @@ async def process_language_callback(callback: CallbackQuery, state: FSMContext) 
     selected_lang = callback.data.split("_")[1] # 'uz', 'ru' или 'en'
     user_id = callback.from_user.id
     
-    # Сохраняем выбранный язык в базу
     async with aiosqlite.connect(DB_NAME) as db:
+        # Сохраняем выбранный язык в базу
         await db.execute(
             "UPDATE users SET lang = ? WHERE user_id = ?",
             (selected_lang, user_id)
         )
         await db.commit()
         
-        # Проверяем, есть ли уже номер телефона у пользователя
-        async with db.execute("SELECT phone FROM users WHERE user_id = ?", (user_id,)) as cursor:
-            p_row = await cursor.fetchone()
-            has_phone = p_row[0] if p_row else None
+        # Проверяем статус пользователя (есть ли у него имя и роль)
+        async with db.execute("SELECT role, first_name, phone FROM users WHERE user_id = ?", (user_id,)) as cursor:
+            row = await cursor.fetchone()
+            role = row[0] if row and row[0] else "passenger"
+            first_name = row[1] if row else None
+            has_phone = row[2] if row else None
 
     await callback.message.delete()
     
-    # Если телефон еще не привязан — переводим к запросу телефона на выбранном языке
-    if not has_phone:
-        phone_kb = ReplyKeyboardMarkup(
-            keyboard=[[KeyboardButton(text="📱 Kontakt bilan bo'lishish" if selected_lang == "uz" else "📱 Поделиться контактом", request_contact=True)]],
-            resize_keyboard=True,
-            one_time_keyboard=True
-        )
-        
-        prompt_text = {
-            "uz": "Iltimos, telefon raqamingizni yuboring:",
-            "en": "Please send your phone number:",
-            "ru": "Пожалуйста, отправьте ваш номер телефона:"
-        }
-        
-        await callback.message.answer(
-            prompt_text.get(selected_lang, prompt_text["ru"]),
-            reply_markup=phone_kb
-        )
-        await state.set_state(RegistrationStates.waiting_for_phone)
-    else:
-        # Если телефон уже есть — открываем главное меню
-        async with aiosqlite.connect(DB_NAME) as db:
-            async with db.execute("SELECT role FROM users WHERE user_id = ?", (user_id,)) as cursor:
-                r_row = await cursor.fetchone()
-                role = r_row[0] if r_row else "passenger"
-                
+    # ЕСЛИ ПОЛЬЗОВАТЕЛЬ УЖЕ ЗАРЕГИСТРИРОВАН (у него есть имя в базе):
+    # Просто меняем язык интерфейса и открываем главное меню, не трогая стейт!
+    if first_name:
         t = LANGS.get(selected_lang, LANGS["ru"])
+        await state.clear()
         await callback.message.answer(
             t["lang_changed"],
             reply_markup=get_main_menu(role, selected_lang)
         )
+        return
+
+    # ЕСЛИ ЭТО НОВЫЙ ПОЛЬЗОВАТЕЛЬ (имени нет) — запускаем регистрацию с шага ввода имени
+    await state.set_state(RegistrationStates.waiting_for_full_name)
+    
+    if selected_lang == "uz":
+        text = "📝 **Ro'yxatdan o'tish**\n\nIltimos, **Ism va Familiyangizni** kiriting:"
+    elif selected_lang == "en":
+        text = "📝 **Registration**\n\nPlease enter your **First and Last Name**:"
+    else:
+        text = "📝 **Регистрация в системе**\n\nПожалуйста, введите ваши **Имя и Фамилию**:"
+        
+    await callback.message.answer(text, parse_mode="Markdown")
 
 
 # =====================================================================
