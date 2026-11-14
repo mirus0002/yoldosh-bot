@@ -89,6 +89,7 @@ LANGS: Dict[str, Dict[str, str]] = {
         "balance": "💳 Мой баланс",
         "verification": "📸 Верификация",
         "free_orders": "🚖 Свободные заказы",
+        "how_to_use": "📖 Как пользоваться",
         "lang_changed": "🇷🇺 Язык успешно изменен на русский!",
         "cancel_order_btn": "❌ Отменить заказ",
         "accept_order_btn": "🚖 Принять заказ",
@@ -96,6 +97,18 @@ LANGS: Dict[str, Dict[str, str]] = {
         "sos_btn": "🚨 ТРЕВОГА (SOS)",
         "finish_trip_btn": "🏁 Завершить поездку",
         "delete_profile_btn": "❌ Удалить профиль",
+        "how_to_use_text": (
+            "📖 **Руководство пользователя Yo'ldosh Taxi**\n\n"
+            "1️⃣ **Для пассажиров:**\n"
+            "• Нажмите «🚕 Заказать такси» или «🕒 Заказать на потом».\n"
+            "• Укажите точку отправления, пункт назначения и комментарий при необходимости.\n"
+            "• Ожидайте, пока свободный водитель примет ваш заказ.\n\n"
+            "2️⃣ **Для водителей:**\n"
+            "• Нажмите «🚖 Стать водителем», пройдите верификацию (отправьте фото прав/паспорта) и пополните баланс.\n"
+            "• В разделе «🚖 Свободные заказы» просматривайте и принимайте заявки.\n\n"
+            "🚨 Во время поездки доступна кнопка экстренной связи **SOS**.\n"
+            "📞 Служба поддержки: **+998 91 773-51-52**"
+        ),
         "topup_instructions": (
             "💳 **Пополнение баланса водителя**\n\n"
             "Переведите необходимую сумму на банковскую карту:\n"
@@ -128,6 +141,7 @@ LANGS: Dict[str, Dict[str, str]] = {
         "balance": "💳 Mening balansim",
         "verification": "📸 Verifikatsiya",
         "free_orders": "🚖 Bo'sh buyurtmalar",
+        "how_to_use": "📖 Qo'llanma",
         "lang_changed": "🇺🇿 Til muvaffaqiyatli o'zbek tiliga o'zgartirildi!",
         "cancel_order_btn": "❌ Buyurtmani bekor qilish",
         "accept_order_btn": "🚖 Buyurtmani qabul qilish",
@@ -135,6 +149,18 @@ LANGS: Dict[str, Dict[str, str]] = {
         "sos_btn": "🚨 TREVOGA (SOS)",
         "finish_trip_btn": "🏁 Safarni yakunlash",
         "delete_profile_btn": "❌ Profilni o'chirish",
+        "how_to_use_text": (
+            "📖 **Yo'ldosh Taxi foydalanish qo'llanmasi**\n\n"
+            "1️⃣ **Yo'lovchilar uchun:**\n"
+            "• «🚕 Taksi chaqirish» yoki «🕒 Keyinga buyurtma berish» tugmasini bosing.\n"
+            "• Qayerdan va qayerga borishingizni hamda izohni kiriting.\n"
+            "• Haydovchi buyurtmangizni qabul qilishini kuting.\n\n"
+            "2️⃣ **Haydovchilar uchun:**\n"
+            "• «🚖 Haydovchi bo'lish»ni tanlang, verifikatsiyadan o'ting (guvohnoma/pasport rasmini yuboring) va balansni to'ldiring.\n"
+            "• «🚖 Bo'sh buyurtmalar» bo'limidan buyurtmalarni qabul qiling.\n\n"
+            "🚨 Safar davomida favqulodda **SOS** tugmasi ishlaydi.\n"
+            "📞 Qo'llab-quvvatlash: **+998 91 773-51-52**"
+        ),
         "topup_instructions": (
             "💳 **Haydovchi balansini to'ldirish**\n\n"
             "Kerakli summani quyidagi bank kartasiga o'tkazing:\n"
@@ -166,6 +192,7 @@ LANGS: Dict[str, Dict[str, str]] = {
         "balance": "💳 My Balance",
         "verification": "📸 Verification",
         "free_orders": "🚖 Free Orders",
+        "how_to_use": "📖 How to use",
         "lang_changed": "🇬🇧 Language successfully changed to English!",
         "cancel_order_btn": "❌ Cancel Order",
         "accept_order_btn": "🚖 Accept Order",
@@ -173,6 +200,18 @@ LANGS: Dict[str, Dict[str, str]] = {
         "sos_btn": "🚨 SOS EMERGENCY",
         "finish_trip_btn": "🏁 Complete Trip",
         "delete_profile_btn": "❌ Delete Profile",
+        "how_to_use_text": (
+            "📖 **Yo'ldosh Taxi User Guide**\n\n"
+            "1️⃣ **For Passengers:**\n"
+            "• Tap «🚕 Order Taxi» or «🕒 Order for Later».\n"
+            "• Enter your pickup location, destination, and optional comment.\n"
+            "• Wait for an available driver to accept your ride.\n\n"
+            "2️⃣ **For Drivers:**\n"
+            "• Choose «🚖 Become a Driver», pass verification (send license/passport photo), and top up your balance.\n"
+            "• Browse and accept rides in the «🚖 Free Orders» section.\n\n"
+            "🚨 An emergency **SOS** button is available during active trips.\n"
+            "📞 Support: **+998 91 773-51-52**"
+        ),
         "topup_instructions": (
             "💳 **Driver Balance Top-Up**\n\n"
             "Transfer the required amount to the bank card:\n"
@@ -245,6 +284,7 @@ class OrderStates(StatesGroup):
     waiting_for_destination = State()
     waiting_for_schedule_time = State()
     waiting_for_comment = State()
+    waiting_for_sos_reason = State() # <-- Новое состояние для фиксации причины тревоги
 
 
 class DriverStates(StatesGroup):
@@ -466,6 +506,7 @@ def get_main_menu(role: str = "passenger", lang: str = "ru") -> ReplyKeyboardMar
                     KeyboardButton(text=t["history"]),
                 ],
                 [
+                    KeyboardButton(text=t["how_to_use"]), # <-- Кнопка "Как пользоваться"
                     KeyboardButton(text="🌐 Сменить язык / Jurnal")
                 ],
             ],
@@ -487,6 +528,7 @@ def get_main_menu(role: str = "passenger", lang: str = "ru") -> ReplyKeyboardMar
                     KeyboardButton(text=t["become_driver"]),
                 ],
                 [
+                    KeyboardButton(text=t["how_to_use"]), # <-- Кнопка "Как пользоваться"
                     KeyboardButton(text="🌐 Сменить язык / Jurnal")
                 ],
             ],
@@ -765,22 +807,59 @@ async def change_language_menu_btn(message: Message) -> None:
     await message.answer("🌐 Выберите язык / Tilni tanlang / Choose language:", reply_markup=get_language_keyboard())
 
 
+# =====================================================================
+# ЕДИНЫЙ ОБРАБОТЧИК ВЫБОРА ЯЗЫКА
+# =====================================================================
+
 @router.callback_query(F.data.startswith("lang_"))
-async def set_language_callback(callback: CallbackQuery) -> None:
-    lang = callback.data.split("_")[1]
+async def process_language_callback(callback: CallbackQuery, state: FSMContext) -> None:
+    selected_lang = callback.data.split("_")[1] # 'uz', 'ru' или 'en'
     user_id = callback.from_user.id
-
+    
     async with aiosqlite.connect(DB_NAME) as db:
-        await db.execute("UPDATE users SET lang = ? WHERE user_id = ?", (lang, user_id))
-        async with db.execute("SELECT role FROM users WHERE user_id = ?", (user_id,)) as cursor:
-            row = await cursor.fetchone()
-            role = row[0] if row else "passenger"
+        # 1. Сохраняем выбранный язык в базу данных
+        await db.execute(
+            "UPDATE users SET lang = ? WHERE user_id = ?",
+            (selected_lang, user_id)
+        )
         await db.commit()
+        
+        # 2. Проверяем текущий статус пользователя в базе
+        async with db.execute("SELECT role, first_name, phone FROM users WHERE user_id = ?", (user_id,)) as cursor:
+            row = await cursor.fetchone()
+            role = row[0] if row and row[0] else "passenger"
+            first_name = row[1] if row else None
+            phone = row[2] if row else None
 
-    t = LANGS.get(lang, LANGS["ru"])
-    await callback.message.edit_text(f"✅ {t['lang_changed']}", parse_mode="Markdown")
-    await callback.message.answer(t["choose_action"], reply_markup=get_main_menu(role, lang))
+    # Безопасно удаляем инлайн-кнопки выбора языка
+    try:
+        await callback.message.delete()
+    except Exception:
+        pass
+    
+    # 3. ЕСЛИ ПОЛЬЗОВАТЕЛЬ УЖЕ ЗАРЕГИСТРИРОВАН (есть имя и телефон):
+    # Очищаем стейт, меняем язык и мгновенно перестраиваем клавиатуру под новый язык!
+    if first_name and phone:
+        t = LANGS.get(selected_lang, LANGS["ru"])
+        await state.clear()
+        await callback.message.answer(
+            f"✅ {t['lang_changed']}\n\n{t['choose_action']}",
+            reply_markup=get_main_menu(role, selected_lang),
+            parse_mode="Markdown"
+        )
+        return
 
+    # 4. ЕСЛИ ЭТО НОВЫЙ ПОЛЬЗОВАТЕЛЬ (регистрация не завершена) — запускаем шаг ввода имени
+    await state.set_state(RegistrationStates.waiting_for_full_name)
+    
+    if selected_lang == "uz":
+        text = "📝 **Ro'yxatdan o'tish**\n\nIltimos, **Ism va Familiyangizni** kiriting:"
+    elif selected_lang == "en":
+        text = "📝 **Registration**\n\nPlease enter your **First and Last Name**:"
+    else:
+        text = "📝 **Регистрация в системе**\n\nПожалуйста, введите ваши **Имя и Фамилию**:"
+        
+    await callback.message.answer(text, parse_mode="Markdown")
 
 @router.message(F.text.in_(["🚖 Стать водителем", "🚖 Haydovchi bo'lish", "🚖 Become a Driver"]))
 async def switch_to_driver_mode(message: Message) -> None:
@@ -1181,29 +1260,77 @@ async def passenger_location_receiver(message: Message) -> None:
 # =====================================================================
 
 @router.callback_query(F.data.startswith("trip_sos_"))
-async def trip_sos_handler(callback: CallbackQuery) -> None:
+async def trip_sos_handler(callback: CallbackQuery, state: FSMContext) -> None:
     order_id = int(callback.data.split("_")[2])
+    
+    # 1. Сохраняем ID заказа в память (state) и переводим пользователя в режим ожидания причины
+    await state.update_data(sos_order_id=order_id)
+    await state.set_state(OrderStates.waiting_for_sos_reason)
+    
+    # 2. Уведомляем пользователя всплывающим окном и просим написать причину
+    await callback.answer("🚨 Введите причину тревоги (SOS):", show_alert=True)
+    await callback.message.answer(
+        "🚨 **Экстренная ситуация (SOS)**\n\n"
+        "Пожалуйста, кратко опишите причину, почему вы нажимаете кнопку тревоги (отправьте текстовое сообщение):",
+        parse_mode="Markdown"
+    )
+
+@router.message(OrderStates.waiting_for_sos_reason, F.text)
+async def process_sos_reason(message: Message, state: FSMContext) -> None:
+    reason = message.text.strip()
+    data = await state.get_data()
+    order_id = data.get("sos_order_id")
+    user_id = message.from_user.id
+    
     async with aiosqlite.connect(DB_NAME) as db:
+        # Получаем ID пассажира и водителя по заказу
         async with db.execute("SELECT passenger_id, driver_id FROM orders WHERE order_id = ?", (order_id,)) as cursor:
-            row = await cursor.fetchone()
-            if row:
-                p_id, d_id = row
-                await callback.answer("🚨 ТРЕВОГА ОТПРАВЛЕНА!", show_alert=True)
-                await bot.send_message(
-                    CHANNEL_USERNAME,
-                    f"🚨 **ТРЕВОГА (SOS) ПО ПОЕЗДКЕ #{order_id}**\nПассажир ID: `{p_id}` | Водитель ID: `{d_id}`",
-                    parse_mode="Markdown"
-                )
+            order_row = await cursor.fetchone()
+            
+        if not order_row:
+            await message.answer("⚠️ Ошибка: данные поездки не найдены.")
+            await state.clear()
+            return
+            
+        p_id, d_id = order_row
+        sender_role = "Пассажир" if user_id == p_id else "Водитель"
+        
+        # Достаем из базы имя и телефон пассажира
+        async with db.execute("SELECT first_name, last_name, phone FROM users WHERE user_id = ?", (p_id,)) as cursor:
+            p_user = await cursor.fetchone()
+            p_name = f"{p_user[0]} {p_user[1]}" if p_user else "Не указано"
+            p_phone = p_user[2] if p_user and p_user[2] else "Не указан"
+            
+        # Достаем из базы имя и телефон водителя (если он назначен)
+        d_name, d_phone = "Не назначен", "Не указан"
+        if d_id:
+            async with db.execute("SELECT first_name, last_name, phone FROM users WHERE user_id = ?", (d_id,)) as cursor:
+                d_user = await cursor.fetchone()
+                if d_user:
+                    d_name = f"{d_user[0]} {d_user[1]}"
+                    d_phone = d_user[2] if d_user[2] else "Не указан"
 
-
-@router.callback_query(F.data.startswith("trip_finish_"))
-async def trip_finish_handler(callback: CallbackQuery) -> None:
-    order_id = int(callback.data.split("_")[2])
-    async with aiosqlite.connect(DB_NAME) as db:
-        await db.execute("UPDATE orders SET status = 'completed' WHERE order_id = ?", (order_id,))
-        await db.commit()
-
-    await callback.message.edit_text(f"🏁 Поездка #{order_id} успешно завершена.")
+    # Формируем подробный отчет для админа
+    admin_text = (
+        f"🚨 **ЭКСТРЕННАЯ ТРЕВОГА (SOS) ПО ПОЕЗДКЕ #{order_id}**\n\n"
+        f"👤 **Кто нажал:** {sender_role} (ID: `{user_id}`)\n"
+        f"📝 **Причина:** {reason}\n\n"
+        f"👤 **Пассажир:** {p_name}\n"
+        f"📞 Телефон пассажира: `{p_phone}` (ID: `{p_id}`)\n\n"
+        f"🚗 **Водитель:** {d_name}\n"
+        f"📞 Телефон водителя: `{d_phone}` (ID: `{d_id or 'Отсутствует'}`)"
+    )
+    
+    # Отправляем сообщение напрямую в ЛС администратору
+    try:
+        await bot.send_message(ADMIN_ID, admin_text, parse_mode="Markdown")
+        await message.answer("✅ Сигнал тревоги и ваша причина успешно переданы администрации!")
+    except Exception as e:
+        logger.error(f"Не удалось отправить SOS админу: {e}")
+        await message.answer("⚠️ Не удалось связаться с администрацией. Пожалуйста, позвоните в службу поддержки напрямую.")
+        
+    # Сбрасываем стейт (выходим из режима ввода причины)
+    await state.clear()
 
 
 # =====================================================================
@@ -1284,24 +1411,106 @@ async def driver_verification_receiver(message: Message, state: FSMContext) -> N
     photo_id = message.photo[-1].file_id
     driver_id = message.from_user.id
 
+    async with aiosqlite.connect(DB_NAME) as db:
+        await db.execute(
+            "UPDATE users SET verification_photo = ? WHERE user_id = ?",
+            (photo_id, driver_id)
+        )
+        async with db.execute(
+            "SELECT lang, first_name, last_name, phone FROM users WHERE user_id = ?",
+            (driver_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            lang = row[0] if row and row[0] else "ru"
+            full_name = f"{row[1] or ''} {row[2] or ''}".strip() or "Не указано"
+            phone = row[3] if row and row[3] else "Не указан"
+        await db.commit()
+
     verif_kb = InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text="✅ Подтвердить верификацию", callback_data=f"approve_driver_{driver_id}")]]
+        inline_keyboard=[[
+            InlineKeyboardButton(text="✅ Подтвердить", callback_data=f"approve_driver_{driver_id}"),
+            InlineKeyboardButton(text="❌ Отклонить", callback_data=f"reject_driver_{driver_id}")
+        ]]
     )
+    
+    # Текст для админа с главным акцентом на телефон водителя
     await bot.send_photo(
         ADMIN_ID,
         photo_id,
-        caption=f"📸 **Запрос на верификацию водителя**\nID водителя: `{driver_id}`",
+        caption=(
+            f"📸 **Запрос на верификацию водителя**\n\n"
+            f"👤 Имя: {full_name}\n"
+            f"📞 **Телефон:** `{phone}`\n"
+            f"🆔 Telegram ID: `{driver_id}`"
+        ),
         reply_markup=verif_kb,
         parse_mode="Markdown",
     )
 
-    async with aiosqlite.connect(DB_NAME) as db:
-        async with db.execute("SELECT lang FROM users WHERE user_id = ?", (driver_id,)) as cursor:
-            row = await cursor.fetchone()
-            lang = row[0] if row else "ru"
-
     await message.answer("✅ Фото документов отправлено администратору на проверку.", reply_markup=get_main_menu("driver", lang))
     await state.clear()
+
+
+@router.callback_query(F.data.startswith("approve_driver_"))
+async def approve_driver_callback(callback: CallbackQuery) -> None:
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("⛔ Нет доступа", show_alert=True)
+        return
+
+    driver_id = int(callback.data.split("_")[2])
+    async with aiosqlite.connect(DB_NAME) as db:
+        await db.execute("UPDATE users SET verified = 1 WHERE user_id = ?", (driver_id,))
+        async with db.execute("SELECT lang FROM users WHERE user_id = ?", (driver_id,)) as cursor:
+            row = await cursor.fetchone()
+            lang = row[0] if row and row[0] else "ru"
+        await db.commit()
+
+    await callback.message.edit_caption(
+        caption=f"{callback.message.caption}\n\n✅ **ПОДТВЕРЖДЕНО АДМИНИСТРАТОРОМ**",
+        parse_mode="Markdown"
+    )
+    await callback.answer("Водитель верифицирован!")
+
+    notify_text = {
+        "ru": "✅ Ваша верификация подтверждена администратором! Теперь ваш аккаунт имеет статус «Верифицирован».",
+        "uz": "✅ Verifikatsiyangiz administrator tomonidan tasdiqlandi! Endi hisobingiz «Tasdiqlangan» maqomiga ega.",
+        "en": "✅ Your verification has been approved by the admin! Your account is now marked as Verified."
+    }
+    try:
+        await bot.send_message(driver_id, notify_text.get(lang, notify_text["ru"]))
+    except Exception as e:
+        logger.error(f"Не удалось уведомить водителя {driver_id}: {e}")
+
+
+@router.callback_query(F.data.startswith("reject_driver_"))
+async def reject_driver_callback(callback: CallbackQuery) -> None:
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("⛔ Нет доступа", show_alert=True)
+        return
+
+    driver_id = int(callback.data.split("_")[2])
+    async with aiosqlite.connect(DB_NAME) as db:
+        await db.execute("UPDATE users SET verified = 0, verification_photo = NULL WHERE user_id = ?", (driver_id,))
+        async with db.execute("SELECT lang FROM users WHERE user_id = ?", (driver_id,)) as cursor:
+            row = await cursor.fetchone()
+            lang = row[0] if row and row[0] else "ru"
+        await db.commit()
+
+    await callback.message.edit_caption(
+        caption=f"{callback.message.caption}\n\n❌ **ОТКЛОНЕНО АДМИНИСТРАТОРОМ**",
+        parse_mode="Markdown"
+    )
+    await callback.answer("Заявка отклонена.")
+
+    notify_text = {
+        "ru": "❌ Ваша заявка на верификацию отклонена. Пожалуйста, отправьте более четкое фото документов.",
+        "uz": "❌ Verifikatsiya so'rovingiz rad etildi. Iltimos, hujjatlarning aniqroq rasmini qayta yuboring.",
+        "en": "❌ Your verification request was rejected. Please submit a clearer photo of your documents."
+    }
+    try:
+        await bot.send_message(driver_id, notify_text.get(lang, notify_text["ru"]))
+    except Exception as e:
+        logger.error(f"Не удалось уведомить водителя {driver_id}: {e}")
 
 
 @router.callback_query(F.data.startswith("approve_driver_"))
