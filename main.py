@@ -305,6 +305,10 @@ class RegistrationStates(StatesGroup):
     waiting_for_phone = State()
 
 
+class SupportStates(StatesGroup):
+    waiting_for_support_message = State()
+
+
 # =====================================================================
 # ШАГ 1: КОМАНДА /START (ПРОВЕРКА ЯЗЫКА И БАЗЫ)
 # =====================================================================
