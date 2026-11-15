@@ -485,7 +485,7 @@ async def save_user_and_finish(message: Message, state: FSMContext, phone: str) 
 
 
 # =====================================================================
-# 5. КЛАВИАТУРЫ
+# 5. КЛАВИАТУРЫ И ОБРАБОТЧИК КНОПКИ «КАК ПОЛЬЗОВАТЬСЯ»
 # =====================================================================
 
 def get_main_menu(role: str = "passenger", lang: str = "ru") -> ReplyKeyboardMarkup:
@@ -506,7 +506,7 @@ def get_main_menu(role: str = "passenger", lang: str = "ru") -> ReplyKeyboardMar
                     KeyboardButton(text=t["history"]),
                 ],
                 [
-                    KeyboardButton(text=t["how_to_use"]), # <-- Кнопка "Как пользоваться"
+                    KeyboardButton(text=t["how_to_use"]),
                     KeyboardButton(text="🌐 Сменить язык / Jurnal")
                 ],
             ],
@@ -528,7 +528,7 @@ def get_main_menu(role: str = "passenger", lang: str = "ru") -> ReplyKeyboardMar
                     KeyboardButton(text=t["become_driver"]),
                 ],
                 [
-                    KeyboardButton(text=t["how_to_use"]), # <-- Кнопка "Как пользоваться"
+                    KeyboardButton(text=t["how_to_use"]),
                     KeyboardButton(text="🌐 Сменить язык / Jurnal")
                 ],
             ],
@@ -546,6 +546,18 @@ def get_language_keyboard() -> InlineKeyboardMarkup:
             ]
         ]
     )
+
+
+@router.message(F.text.in_([lang_dict["how_to_use"] for lang_dict in LANGS.values()]))
+async def show_how_to_use(message: Message) -> None:
+    user_id = message.from_user.id
+    async with aiosqlite.connect(DB_NAME) as db:
+        async with db.execute("SELECT lang FROM users WHERE user_id = ?", (user_id,)) as cursor:
+            row = await cursor.fetchone()
+            lang = row[0] if row and row[0] else "ru"
+            
+    t = LANGS.get(lang, LANGS["ru"])
+    await message.answer(t["how_to_use_text"], parse_mode="Markdown")
 
 
 # =====================================================================
@@ -1126,7 +1138,7 @@ async def passenger_cancel_order_handler(callback: CallbackQuery) -> None:
                 logger.info(f"Заказ #{order_id} успешно отменен.")
             else:
                 await callback.answer(
-                    "⚠️ Заказ уже принят водителем или отменен!", 
+                    "⚠️ Заказ уже принят водителем!", 
                     show_alert=True
                 )
 # 👆 КОНЕЦ ВСТАВКИ 👆
@@ -1189,28 +1201,68 @@ async def driver_accept_order_handler(callback: CallbackQuery) -> None:
     driver_id = callback.from_user.id
 
     async with aiosqlite.connect(DB_NAME) as db:
+        # 1. Проверяем роль, статус верификации и язык водителя
+        async with db.execute("SELECT role, is_verified, lang FROM users WHERE user_id = ?", (driver_id,)) as cursor:
+            user_row = await cursor.fetchone()
+            
+        if not user_row:
+            await callback.answer("❌ Вы не зарегистрированы в системе.", show_alert=True)
+            return
+
+        role, is_verified, lang = user_row
+
+        # Проверяем, что это действительно водитель
+        if role != "driver":
+            await callback.answer("❌ Принимать заказы могут только водители.", show_alert=True)
+            return
+
+        # 🛑 ГЛАВНАЯ ПРОВЕРКА: Если водитель не верифицирован (is_verified != 1), блокируем принятие заказа
+        if not is_verified or int(is_verified) != 1:
+            not_verified_texts = {
+                "ru": "⚠️ Вы не прошли верификацию! Администрация еще не подтвердила ваш аккаунт водителя.",
+                "uz": "⚠️ Siz identifikatsiyadan o'tmagansiz! Ma'muriyat hali haydovchi hisobingizni tasdiqlamadi.",
+                "en": "⚠️ You are not verified! The administration has not yet approved your driver account."
+            }
+            await callback.answer(not_verified_texts.get(lang, not_verified_texts["ru"]), show_alert=True)
+            return
+
+        # 2. Проверяем статус самого заказа
         async with db.execute("SELECT status, passenger_id FROM orders WHERE order_id = ?", (order_id,)) as cursor:
             row = await cursor.fetchone()
             if not row or row[0] != "pending":
                 await callback.answer("❌ Этот заказ уже занят или отменен!", show_alert=True)
                 return
             passenger_id = row[1]
+            
             await db.execute("UPDATE orders SET driver_id = ?, status = 'accepted' WHERE order_id = ?", (driver_id, order_id))
             await db.commit()
 
-    await callback.message.edit_text(f"✅ Вы успешно приняли заказ #{order_id}!")
+    # 3. Обновляем сообщение в канале: убираем кнопку и пишем, что заказ принят
+    try:
+        current_text = callback.message.text or ""
+        await callback.message.edit_text(
+            f"{current_text}\n\n❌ **Заказ принят водителем.**",
+            reply_markup=None,
+            parse_mode="Markdown"
+        )
+    except Exception as e:
+        logger.error(f"Не удалось обновить сообщение в канале: {e}")
+
+    # Уведомляем водителя всплывающим окном
+    await callback.answer(f"✅ Вы успешно приняли заказ #{order_id}!", show_alert=True)
 
     location_markup = ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text="📍 Отправить мою геопозицию", request_location=True)]],
         resize_keyboard=True,
         one_time_keyboard=True,
     )
+    
+    # Уведомляем пассажира
     await bot.send_message(
         passenger_id,
         "🚗 Водитель принял ваш заказ! Отправьте свою текущую геопозицию для построения маршрута.",
         reply_markup=location_markup,
     )
-
 
 # =====================================================================
 # 9. ГЕОПОЗИЦИЯ И ЯНДЕКС КАРТЫ
@@ -1256,80 +1308,76 @@ async def passenger_location_receiver(message: Message) -> None:
 
 
 # =====================================================================
-# 10. SOS И ЗАВЕРШЕНИЕ ПОЕЗДКИ
+# ЗАВЕРШЕНИЕ ПОЕЗДКИ
 # =====================================================================
 
-@router.callback_query(F.data.startswith("trip_sos_"))
-async def trip_sos_handler(callback: CallbackQuery, state: FSMContext) -> None:
+@router.callback_query(F.data.startswith("trip_finish_"))
+async def trip_finish_handler(callback: CallbackQuery, state: FSMContext) -> None:
     order_id = int(callback.data.split("_")[2])
-    
-    # 1. Сохраняем ID заказа в память (state) и переводим пользователя в режим ожидания причины
-    await state.update_data(sos_order_id=order_id)
-    await state.set_state(OrderStates.waiting_for_sos_reason)
-    
-    # 2. Уведомляем пользователя всплывающим окном и просим написать причину
-    await callback.answer("🚨 Введите причину тревоги (SOS):", show_alert=True)
-    await callback.message.answer(
-        "🚨 **Экстренная ситуация (SOS)**\n\n"
-        "Пожалуйста, кратко опишите причину, почему вы нажимаете кнопку тревоги (отправьте текстовое сообщение):",
-        parse_mode="Markdown"
-    )
+    user_id = callback.from_user.id
 
-@router.message(OrderStates.waiting_for_sos_reason, F.text)
-async def process_sos_reason(message: Message, state: FSMContext) -> None:
-    reason = message.text.strip()
-    data = await state.get_data()
-    order_id = data.get("sos_order_id")
-    user_id = message.from_user.id
-    
     async with aiosqlite.connect(DB_NAME) as db:
-        # Получаем ID пассажира и водителя по заказу
-        async with db.execute("SELECT passenger_id, driver_id FROM orders WHERE order_id = ?", (order_id,)) as cursor:
+        # 1. Получаем информацию о заказе
+        async with db.execute("SELECT passenger_id, driver_id, status FROM orders WHERE order_id = ?", (order_id,)) as cursor:
             order_row = await cursor.fetchone()
             
         if not order_row:
-            await message.answer("⚠️ Ошибка: данные поездки не найдены.")
-            await state.clear()
+            await callback.answer("⚠️ Ошибка: поездка не найдена.", show_alert=True)
             return
-            
-        p_id, d_id = order_row
-        sender_role = "Пассажир" if user_id == p_id else "Водитель"
-        
-        # Достаем из базы имя и телефон пассажира
-        async with db.execute("SELECT first_name, last_name, phone FROM users WHERE user_id = ?", (p_id,)) as cursor:
-            p_user = await cursor.fetchone()
-            p_name = f"{p_user[0]} {p_user[1]}" if p_user else "Не указано"
-            p_phone = p_user[2] if p_user and p_user[2] else "Не указан"
-            
-        # Достаем из базы имя и телефон водителя (если он назначен)
-        d_name, d_phone = "Не назначен", "Не указан"
-        if d_id:
-            async with db.execute("SELECT first_name, last_name, phone FROM users WHERE user_id = ?", (d_id,)) as cursor:
-                d_user = await cursor.fetchone()
-                if d_user:
-                    d_name = f"{d_user[0]} {d_user[1]}"
-                    d_phone = d_user[2] if d_user[2] else "Не указан"
 
-    # Формируем подробный отчет для админа
-    admin_text = (
-        f"🚨 **ЭКСТРЕННАЯ ТРЕВОГА (SOS) ПО ПОЕЗДКЕ #{order_id}**\n\n"
-        f"👤 **Кто нажал:** {sender_role} (ID: `{user_id}`)\n"
-        f"📝 **Причина:** {reason}\n\n"
-        f"👤 **Пассажир:** {p_name}\n"
-        f"📞 Телефон пассажира: `{p_phone}` (ID: `{p_id}`)\n\n"
-        f"🚗 **Водитель:** {d_name}\n"
-        f"📞 Телефон водителя: `{d_phone}` (ID: `{d_id or 'Отсутствует'}`)"
+        p_id, d_id, status = order_row
+
+        if status == 'completed':
+            await callback.answer("ℹ️ Эта поездка уже завершена.", show_alert=True)
+            return
+
+        # 2. Обновляем статус заказа в базе данных
+        await db.execute("UPDATE orders SET status = 'completed' WHERE order_id = ?", (order_id,))
+        await db.commit()
+
+        # 3. Узнаем язык пользователя, который нажал кнопку
+        async with db.execute("SELECT role, lang FROM users WHERE user_id = ?", (user_id,)) as cursor:
+            user_row = await cursor.fetchone()
+            role = user_row[0] if user_row else "passenger"
+            lang = user_row[1] if user_row else "ru"
+
+    await callback.answer("✅ Поездка успешно завершена!", show_alert=True)
+    
+    # Тексты подтверждения на разных языках
+    finish_texts = {
+        "ru": f"🏁 **Поездка №{order_id} завершена.** Спасибо, что воспользовались Yo'ldosh Taxi!",
+        "uz": f"🏁 **{order_id}-sonli safar yakunlandi.** Yo'ldosh Taxi'dan foydalanganingiz uchun rahmat!",
+        "en": f"🏁 **Ride #{order_id} is completed.** Thank you for using Yo'ldosh Taxi!"
+    }
+    
+    await callback.message.edit_text(
+        finish_texts.get(lang, finish_texts["ru"]),
+        parse_mode="Markdown"
     )
     
-    # Отправляем сообщение напрямую в ЛС администратору
-    try:
-        await bot.send_message(ADMIN_ID, admin_text, parse_mode="Markdown")
-        await message.answer("✅ Сигнал тревоги и ваша причина успешно переданы администрации!")
-    except Exception as e:
-        logger.error(f"Не удалось отправить SOS админу: {e}")
-        await message.answer("⚠️ Не удалось связаться с администрацией. Пожалуйста, позвоните в службу поддержки напрямую.")
-        
-    # Сбрасываем стейт (выходим из режима ввода причины)
+    # Отправляем главное меню пользователю
+    t = LANGS.get(lang, LANGS["ru"])
+    await callback.message.answer(
+        t["choose_action"],
+        reply_markup=get_main_menu(role, lang)
+    )
+    
+    # Если завершил водитель, можно продублировать уведомление пассажиру (если он в сети)
+    if user_id == d_id and p_id:
+        try:
+            async with aiosqlite.connect(DB_NAME) as db:
+                async with db.execute("SELECT lang FROM users WHERE user_id = ?", (p_id,)) as cursor:
+                    p_row = await cursor.fetchone()
+                    p_lang = p_row[0] if p_row else "ru"
+            p_text = {
+                "ru": f"🏁 Водитель завершил поездку №{order_id}.",
+                "uz": f"🏁 Haydovchi {order_id}-sonli safarni yakunladi.",
+                "en": f"🏁 Driver has completed ride #{order_id}."
+            }
+            await callback.bot.send_message(p_id, p_text.get(p_lang, p_text["ru"]))
+        except Exception:
+            pass
+
     await state.clear()
 
 
@@ -1612,6 +1660,79 @@ async def show_balance(message: Message) -> None:
 
 
 # =====================================================================
+# СЛУЖБА ПОДДЕРЖКИ (ОБРАЩЕНИЯ ПОЛЬЗОВАТЕЛЕЙ И ОТВЕТ АДМИНА)
+# =====================================================================
+
+# 1. Перехват команды /help
+@router.message(Command("help"))
+async def cmd_help(message: Message, state: FSMContext) -> None:
+    await state.set_state(SupportStates.waiting_for_support_message)
+    await message.answer(
+        "🛠 **Служба поддержки Yo'ldosh Taxi**\n\n"
+        "Напишите ваше сообщение, вопрос или проблему одним текстом, и оно будет мгновенно передано администрации. Мы ответим вам в ближайшее время!",
+        parse_mode="Markdown"
+    )
+
+# 2. Получение текста от пользователя, поиск телефона в базе и пересылка админу
+@router.message(SupportStates.waiting_for_support_message, F.text)
+async def forward_to_admin(message: Message, state: FSMContext) -> None:
+    user_id = message.from_user.id
+    username = f"@{message.from_user.username}" if message.from_user.username else "Не указан"
+    full_name = message.from_user.full_name or "Не указано"
+    text = message.text
+
+    phone = "Не указан в базе"
+    async with aiosqlite.connect(DB_NAME) as db:
+        async with db.execute("SELECT phone FROM users WHERE user_id = ?", (user_id,)) as cursor:
+            row = await cursor.fetchone()
+            if row and row[0]:
+                phone = row[0]
+
+    admin_text = (
+        f"📩 **Новое обращение в поддержку!**\n\n"
+        f"👤 **От:** {full_name}\n"
+        f"🔗 **Username:** {username}\n"
+        f"📞 **Телефон:** `{phone}`\n"
+        f"🆔 **ID:** `{user_id}` (скрытый системный)\n\n"
+        f"💬 **Сообщение:**\n{text}"
+    )
+
+    try:
+        await bot.send_message(ADMIN_ID, admin_text, parse_mode="Markdown")
+        await message.answer("✅ Ваше сообщение успешно отправлено в службу поддержки! Ожидайте ответа.")
+    except Exception as e:
+        logger.error(f"Не удалось отправить сообщение в поддержку админу: {e}")
+        await message.answer("⚠️ Не удалось связаться с поддержкой. Попробуйте позже.")
+
+    await state.clear()
+
+# 3. Ответ администратора пользователю через Reply
+@router.message(F.from_user.id == ADMIN_ID, F.reply_to_message)
+async def admin_reply_handler(message: Message) -> None:
+    reply_msg = message.reply_to_message
+    if not reply_msg or not reply_msg.text:
+        return
+
+    match = re.search(r"🆔 \*\*ID:\*\* `(\d+)`", reply_msg.text)
+    if not match:
+        await message.reply("⚠️ Не удалось определить ID пользователя из этого сообщения.")
+        return
+
+    target_user_id = int(match.group(1))
+    admin_response = message.text
+
+    try:
+        await bot.send_message(
+            target_user_id,
+            f"👨‍💻 **Ответ от службы поддержки:**\n\n{admin_response}",
+            parse_mode="Markdown"
+        )
+        await message.reply("✅ Ответ успешно отправлен пользователю!")
+    except Exception as e:
+        await message.reply(f"⚠️ Не удалось отправить сообщение пользователю: {e}")
+
+
+# =====================================================================
 # 13. AIOHTTP СЕРВЕР ДЛЯ RENDER
 # =====================================================================
 
@@ -1632,12 +1753,21 @@ async def start_web_server() -> web.AppRunner:
     return runner
 
 
+from aiogram.types import BotCommand
+
 # =====================================================================
 # 14. ЗАПУСК
 # =====================================================================
 
 async def main() -> None:
     await init_db()
+    
+    # Регистрируем команды бота, чтобы они появлялись при вводе "/"
+    await bot.set_my_commands([
+        BotCommand(command="start", description="🚀 Запустить бота / Главное меню"),
+        BotCommand(command="help", description="❓ Помощь и инструкция"),
+    ])
+    
     dp.include_router(router)
     runner = await start_web_server()
     
