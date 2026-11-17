@@ -1800,167 +1800,41 @@ async def cmd_help(message: Message, state: FSMContext) -> None:
 # 2. Получение текста от пользователя и пересылка админу с кнопкой «Ответить»
 @router.message(SupportStates.waiting_for_support_message, F.text)
 async def forward_to_admin(message: Message, state: FSMContext) -> None:
-    user_id = message.from_user.id
-    username = f"@{html.escape(message.from_user.username)}" if message.from_user.username else "Не указан"
-    full_name = html.escape(message.from_user.full_name or "Не указано")
-    user_text = html.escape(message.text)
-
-    phone = "Не указан в базе"
-    async with aiosqlite.connect(DB_NAME) as db:
-        async with db.execute("SELECT phone FROM users WHERE user_id = ?", (user_id,)) as cursor:
-            row = await cursor.fetchone()
-            if row and row[0]:
-                phone = html.escape(str(row[0]))
-
-    admin_text = (
-        f"📩 <b>Новое обращение в поддержку!</b>\n\n"
-        f"👤 <b>От:</b> {full_name}\n"
-        f"🔗 <b>Username:</b> {username}\n"
-        f"📞 <b>Телефон:</b> <code>{phone}</code>\n"
-        f"🆔 <b>ID:</b> <code>{user_id}</code>\n\n"
-        f"💬 <b>Сообщение:</b>\n{user_text}"
-    )
-
-    reply_kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="💬 Ответить анонимно", callback_data=f"support_reply_{user_id}")]
-        ]
-    )
-
     try:
-        await bot.send_message(ADMIN_ID, admin_text, reply_markup=reply_kb, parse_mode="HTML")
-        await message.answer("✅ Ваше сообщение успешно отправлено в службу поддержки! Ожидайте ответа.")
-    except Exception as e:
-        logger.error(f"Не удалось отправить сообщение в поддержку админу: {e}")
-        await message.answer("⚠️ Не удалось связаться с поддержкой. Попробуйте позже.")
+        user_id = message.from_user.id
+        username = f"@{html.escape(message.from_user.username)}" if message.from_user.username else "Не указан"
+        full_name = html.escape(message.from_user.full_name or "Не указано")
+        user_text = html.escape(message.text)
 
-    await state.clear()
+        phone = "Не указан в базе"
+        async with aiosqlite.connect(DB_NAME) as db:
+            async with db.execute("SELECT phone FROM users WHERE user_id = ?", (user_id,)) as cursor:
+                row = await cursor.fetchone()
+                if row and row[0]:
+                    phone = html.escape(str(row[0]))
 
-
-# 3. Нажатие админом кнопки «💬 Ответить анонимно»
-@router.callback_query(F.from_user.id == ADMIN_ID, F.data.startswith("support_reply_"))
-async def admin_start_reply_callback(callback: CallbackQuery, state: FSMContext) -> None:
-    target_user_id = int(callback.data.split("_")[2])
-    await state.update_data(reply_target_id=target_user_id)
-    await state.set_state(AdminReplyStates.waiting_for_reply_text)
-    await callback.message.answer(
-        f"✍️ Напишите ответ для пользователя (ID: <code>{target_user_id}</code>).\n"
-        f"Ваше сообщение будет отправлено от имени бота:",
-        parse_mode="HTML"
-    )
-    await callback.answer()
-
-
-# 4. Отправка ответа админа по состоянию (после нажатия кнопки)
-@router.message(F.from_user.id == ADMIN_ID, AdminReplyStates.waiting_for_reply_text, F.text)
-async def admin_send_button_reply(message: Message, state: FSMContext) -> None:
-    data = await state.get_data()
-    target_user_id = data.get("reply_target_id")
-    await state.clear()
-
-    if not target_user_id:
-        await message.reply("⚠️ Ошибка: ID получателя потерян. Нажмите кнопку «Ответить» ещё раз.")
-        return
-
-    await _deliver_anonymous_support_reply(message, int(target_user_id), message.text)
-
-
-# 5. Запасной вариант: ответ администратора через обычный Reply на карточку
-@router.message(F.from_user.id == ADMIN_ID, F.reply_to_message, F.text)
-async def admin_reply_handler(message: Message) -> None:
-    reply_msg = message.reply_to_message
-    if not reply_msg or not reply_msg.text:
-        return
-
-    match = re.search(r"🆔\s*ID:\s*(\d+)", reply_msg.text)
-    if not match:
-        return
-
-    target_user_id = int(match.group(1))
-    await _deliver_anonymous_support_reply(message, target_user_id, message.text)
-
-
-async def _deliver_anonymous_support_reply(admin_msg: Message, target_user_id: int, raw_text: str) -> None:
-    safe_response = html.escape(raw_text)
-
-    async with aiosqlite.connect(DB_NAME) as db:
-        async with db.execute("SELECT lang FROM users WHERE user_id = ?", (target_user_id,)) as cursor:
-            row = await cursor.fetchone()
-    user_lang = row[0] if row and row[0] else "ru"
-
-    headers = {
-        "ru": "🛠 <b>Ответ от службы поддержки Yo'ldosh Taxi:</b>",
-        "uz": "🛠 <b>Yo'ldosh Taxi qo'llab-quvvatlash xizmatidan javob:</b>",
-        "en": "🛠 <b>Response from Yo'ldosh Taxi Support:</b>"
-    }
-    header = headers.get(user_lang, headers["ru"])
-
-    try:
-        await bot.send_message(
-            target_user_id,
-            f"{header}\n\n{safe_response}",
-            parse_mode="HTML"
+        admin_text = (
+            f"📩 <b>Новое обращение в поддержку!</b>\n\n"
+            f"👤 <b>От:</b> {full_name}\n"
+            f"🔗 <b>Username:</b> {username}\n"
+            f"📞 <b>Телефон:</b> <code>{phone}</code>\n"
+            f"🆔 <b>ID:</b> <code>{user_id}</code>\n\n"
+            f"💬 <b>Сообщение:</b>\n{user_text}"
         )
-        await admin_msg.reply("✅ Ответ анонимно доставлен пользователю от имени бота!")
-    except Exception as e:
-        logger.error(f"Не удалось отправить ответ пользователю {target_user_id}: {e}")
-        await admin_msg.reply(f"⚠️ Не удалось отправить сообщение пользователю: {html.escape(str(e))}")# =====================================================================
-# СЛУЖБА ПОДДЕРЖКИ (ОБРАЩЕНИЯ ПОЛЬЗОВАТЕЛЕЙ И АНОНИМНЫЙ ОТВЕТ АДМИНА)
-# =====================================================================
 
-class AdminReplyStates(StatesGroup):
-    waiting_for_reply_text = State()
+        reply_kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="💬 Ответить анонимно", callback_data=f"support_reply_{user_id}")]
+            ]
+        )
 
-
-# 1. Перехват команды /help
-@router.message(Command("help"))
-async def cmd_help(message: Message, state: FSMContext) -> None:
-    await state.set_state(SupportStates.waiting_for_support_message)
-    await message.answer(
-        "🛠 <b>Служба поддержки Yo'ldosh Taxi</b>\n\n"
-        "Напишите ваше сообщение, вопрос или проблему одним текстом, и оно будет мгновенно передано администрации. Мы ответим вам в ближайшее время!",
-        parse_mode="HTML"
-    )
-
-
-# 2. Получение текста от пользователя и пересылка админу с кнопкой «Ответить»
-@router.message(SupportStates.waiting_for_support_message, F.text)
-async def forward_to_admin(message: Message, state: FSMContext) -> None:
-    user_id = message.from_user.id
-    username = f"@{html.escape(message.from_user.username)}" if message.from_user.username else "Не указан"
-    full_name = html.escape(message.from_user.full_name or "Не указано")
-    user_text = html.escape(message.text)
-
-    phone = "Не указан в базе"
-    async with aiosqlite.connect(DB_NAME) as db:
-        async with db.execute("SELECT phone FROM users WHERE user_id = ?", (user_id,)) as cursor:
-            row = await cursor.fetchone()
-            if row and row[0]:
-                phone = html.escape(str(row[0]))
-
-    admin_text = (
-        f"📩 <b>Новое обращение в поддержку!</b>\n\n"
-        f"👤 <b>От:</b> {full_name}\n"
-        f"🔗 <b>Username:</b> {username}\n"
-        f"📞 <b>Телефон:</b> <code>{phone}</code>\n"
-        f"🆔 <b>ID:</b> <code>{user_id}</code>\n\n"
-        f"💬 <b>Сообщение:</b>\n{user_text}"
-    )
-
-    reply_kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="💬 Ответить анонимно", callback_data=f"support_reply_{user_id}")]
-        ]
-    )
-
-    try:
         await bot.send_message(ADMIN_ID, admin_text, reply_markup=reply_kb, parse_mode="HTML")
         await message.answer("✅ Ваше сообщение успешно отправлено в службу поддержки! Ожидайте ответа.")
     except Exception as e:
         logger.error(f"Не удалось отправить сообщение в поддержку админу: {e}")
         await message.answer("⚠️ Не удалось связаться с поддержкой. Попробуйте позже.")
-
-    await state.clear()
+    finally:
+        await state.clear()
 
 
 # 3. Нажатие админом кнопки «💬 Ответить анонимно»
@@ -2031,7 +1905,6 @@ async def _deliver_anonymous_support_reply(admin_msg: Message, target_user_id: i
     except Exception as e:
         logger.error(f"Не удалось отправить ответ пользователю {target_user_id}: {e}")
         await admin_msg.reply(f"⚠️ Не удалось отправить сообщение пользователю: {html.escape(str(e))}")
-
 
 # =====================================================================
 # 13. AIOHTTP СЕРВЕР ДЛЯ RENDER
