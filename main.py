@@ -284,7 +284,7 @@ class OrderStates(StatesGroup):
     waiting_for_destination = State()
     waiting_for_schedule_time = State()
     waiting_for_comment = State()
-    waiting_for_sos_reason = State() # <-- Новое состояние для фиксации причины тревоги
+    waiting_for_sos_reason = State()  # <-- Новое состояние для фиксации причины тревоги
 
 
 class DriverStates(StatesGroup):
@@ -307,6 +307,113 @@ class RegistrationStates(StatesGroup):
 
 class SupportStates(StatesGroup):
     waiting_for_support_message = State()
+
+
+class AdminReplyStates(StatesGroup):
+    waiting_for_reply_text = State()
+
+
+# =====================================================================
+# СЛУЖБА ПОДДЕРЖКИ (ОБРАЩЕНИЯ ПОЛЬЗОВАТЕЛЕЙ И ОТВЕТ АДМИНА)
+# =====================================================================
+
+@router.message(Command("help"))
+async def cmd_help(message: Message, state: FSMContext) -> None:
+    await state.set_state(SupportStates.waiting_for_support_message)
+    await message.answer(
+        "🛠 <b>Служба поддержки Yo'ldosh Taxi</b>\n\n"
+        "Напишите ваше сообщение, вопрос или проблему одним текстом, и оно будет мгновенно передано администрации. Мы ответим вам в ближайшее время!",
+        parse_mode="HTML"
+    )
+
+
+@router.message(SupportStates.waiting_for_support_message, F.text)
+async def process_support_message(message: Message, state: FSMContext) -> None:
+    try:
+        user_id = message.from_user.id
+        username = f"@{html.escape(message.from_user.username)}" if message.from_user.username else "Не указан"
+        full_name = html.escape(message.from_user.full_name or "Не указано")
+        user_text = html.escape(message.text)
+
+        phone = "Не указан в базе"
+        async with aiosqlite.connect(DB_NAME) as db:
+            async with db.execute("SELECT phone FROM users WHERE user_id = ?", (user_id,)) as cursor:
+                row = await cursor.fetchone()
+                if row and row[0]:
+                    phone = html.escape(str(row[0]))
+
+        admin_text = (
+            f"📩 <b>Новое обращение в поддержку!</b>\n\n"
+            f"👤 <b>От:</b> {full_name}\n"
+            f"🔗 <b>Username:</b> {username}\n"
+            f"📞 <b>Телефон:</b> <code>{phone}</code>\n"
+            f"🆔 <b>ID:</b> <code>{user_id}</code>\n\n"
+            f"💬 <b>Сообщение:</b>\n{user_text}"
+        )
+
+        reply_kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="💬 Ответить анонимно", callback_data=f"support_reply_{user_id}")]
+            ]
+        )
+
+        await bot.send_message(ADMIN_ID, admin_text, reply_markup=reply_kb, parse_mode="HTML")
+        await message.answer("✅ Ваше сообщение успешно отправлено в службу поддержки! Ожидайте ответа.")
+    except Exception as e:
+        logger.error(f"Не удалось отправить сообщение в поддержку админу: {e}")
+        await message.answer("⚠️ Не удалось связаться с поддержкой. Попробуйте позже.")
+    finally:
+        # ГАРАНТИРОВАННЫЙ СБРОС СОСТОЯНИЯ — ЗАЩИТА ОТ ЗАВИСАНИЙ
+        await state.clear()
+
+
+@router.callback_query(F.from_user.id == ADMIN_ID, F.data.startswith("support_reply_"))
+async def admin_start_reply_callback(callback: CallbackQuery, state: FSMContext) -> None:
+    target_user_id = int(callback.data.split("_")[2])
+    await state.update_data(reply_target_id=target_user_id)
+    await state.set_state(AdminReplyStates.waiting_for_reply_text)
+    await callback.message.answer(
+        f"✍️ Напишите ответ для пользователя (ID: <code>{target_user_id}</code>).\n"
+        f"Ваше сообщение будет отправлено от имени бота:",
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+
+@router.message(F.from_user.id == ADMIN_ID, AdminReplyStates.waiting_for_reply_text, F.text)
+async def admin_send_button_reply(message: Message, state: FSMContext) -> None:
+    data = await state.get_data()
+    target_user_id = data.get("reply_target_id")
+    await state.clear()
+
+    if not target_user_id:
+        await message.reply("⚠️ Ошибка: ID получателя потерян. Нажмите кнопку «Ответить» ещё раз.")
+        return
+
+    safe_response = html.escape(message.text)
+
+    async with aiosqlite.connect(DB_NAME) as db:
+        async with db.execute("SELECT lang FROM users WHERE user_id = ?", (int(target_user_id),)) as cursor:
+            row = await cursor.fetchone()
+    user_lang = row[0] if row and row[0] else "ru"
+
+    headers = {
+        "ru": "🛠 <b>Ответ от службы поддержки Yo'ldosh Taxi:</b>",
+        "uz": "🛠 <b>Yo'ldosh Taxi qo'llab-quvvatlash xizmatidan javob:</b>",
+        "en": "🛠 <b>Response from Yo'ldosh Taxi Support:</b>"
+    }
+    header = headers.get(user_lang, headers["ru"])
+
+    try:
+        await bot.send_message(
+            int(target_user_id),
+            f"{header}\n\n{safe_response}",
+            parse_mode="HTML"
+        )
+        await message.reply("✅ Ответ анонимно доставлен пользователю от имени бота!")
+    except Exception as e:
+        logger.error(f"Не удалось отправить ответ пользователю {target_user_id}: {e}")
+        await message.reply(f"⚠️ Не удалось отправить сообщение пользователю: {html.escape(str(e))}")
 
 
 # =====================================================================
@@ -1743,178 +1850,166 @@ async def change_language_request(message: Message, state: FSMContext) -> None:
 
 
 # =====================================================================
-# ХЕНДЛЕР КНОПКИ БАЛАНСА
+# СИСТЕМА ПОПОЛНЕНИЯ БАЛАНСА ЧЕРЕЗ ЧЕКИ И АДМИНА
 # =====================================================================
 
-@router.message(F.text.func(lambda text: text in ["💳 Мой баланс", "💳 Mening balansim", "💳 My Balance"]))
-async def show_balance(message: Message) -> None:
+class AdminTopUpStates(StatesGroup):
+    waiting_for_amount = State()
+
+
+# 1. Кнопка в главном меню или /topup для пользователя (показ реквизитов)
+@router.message(F.text.in_(["💳 Пополнить баланс", "💳 Hisobni to'ldirish"]))
+async def cmd_top_up_request(message: Message, state: FSMContext) -> None:
+    card_number = "9860 3801 2345 6789"
+    card_holder = "Abdumomin Abdurahmanov"
+
+    text_msg = (
+        "💳 <b>Пополнение баланса Yo'ldosh Taxi</b>\n\n"
+        f"1. Переведите необходимую сумму на карту:\n"
+        f"💳 <code>{card_number}</code> ({card_holder})\n\n"
+        "2. После оплаты отправьте сюда <b>скриншот или фото чека</b>.\n"
+        "Администратор проверит перевод, и средства зачислятся на ваш баланс!"
+    )
+    await message.answer(text_msg, parse_mode="HTML")
+
+
+# 2. Получение чека (фото) от пользователя и пересылка админу
+@router.message(F.photo)
+async def user_send_receipt_handler(message: Message, state: FSMContext) -> None:
     user_id = message.from_user.id
+    full_name = html.escape(message.from_user.full_name or "Не указано")
+    username = f"@{html.escape(message.from_user.username)}" if message.from_user.username else "Не указан"
+    photo_file_id = message.photo[-1].file_id
 
+    phone = "Не указан"
     async with aiosqlite.connect(DB_NAME) as db:
-        async with db.execute("SELECT balance, lang FROM users WHERE user_id = ?", (user_id,)) as cursor:
+        async with db.execute("SELECT phone FROM users WHERE user_id = ?", (user_id,)) as cursor:
             row = await cursor.fetchone()
+            if row and row[0]:
+                phone = html.escape(str(row[0]))
 
-    if not row:
-        await message.answer("⚠️ User not found / Пользователь не найден / Foydalanuvchi topilmadi.")
-        return
-
-    balance, lang = row
-    current_balance = balance if balance is not None else 0.0
-
-    if lang == "uz":
-        await message.answer(
-            f"💳 **Sizning hisobingizdagi balans:** `{current_balance:,.2f}` so'm",
-            parse_mode="Markdown"
-        )
-    elif lang == "en":
-        await message.answer(
-            f"💳 **Your current balance:** `{current_balance:,.2f}` UZS",
-            parse_mode="Markdown"
-        )
-    else:
-        await message.answer(
-            f"💳 **Ваш текущий баланс:** `{current_balance:,.2f}` сум",
-            parse_mode="Markdown"
-        )
-
-
-# =====================================================================
-# СЛУЖБА ПОДДЕРЖКИ (ОБРАЩЕНИЯ ПОЛЬЗОВАТЕЛЕЙ И АНОНИМНЫЙ ОТВЕТ АДМИНА)
-# =====================================================================
-
-class AdminReplyStates(StatesGroup):
-    waiting_for_reply_text = State()
-
-
-# 1. Перехват команды /help
-@router.message(Command("help"))
-async def cmd_help(message: Message, state: FSMContext) -> None:
-    await state.set_state(SupportStates.waiting_for_support_message)
-    await message.answer(
-        "🛠 <b>Служба поддержки Yo'ldosh Taxi</b>\n\n"
-        "Напишите ваше сообщение, вопрос или проблему одним текстом, и оно будет мгновенно передано администрации. Мы ответим вам в ближайшее время!",
-        parse_mode="HTML"
+    admin_caption = (
+        f"💰 <b>Запрос на пополнение баланса!</b>\n\n"
+        f"👤 <b>От:</b> {full_name}\n"
+        f"🔗 <b>Username:</b> {username}\n"
+        f"📞 <b>Телефон:</b> <code>{phone}</code>\n"
+        f"🆔 <b>ID пользователя:</b> <code>{user_id}</code>\n\n"
+        f"👇 Нажмите кнопку ниже, чтобы подтвердить платеж и указать сумму:"
     )
 
+    admin_kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✅ Подтвердить пополнение", callback_data=f"topup_accept_{user_id}")],
+            [InlineKeyboardButton(text="❌ Отклонить", callback_data=f"topup_reject_{user_id}")]
+        ]
+    )
 
-# 2. Получение текста от пользователя и пересылка админу с кнопкой «Ответить»
-@router.message(SupportStates.waiting_for_support_message, F.text)
-async def forward_to_admin(message: Message, state: FSMContext) -> None:
     try:
-        user_id = message.from_user.id
-        username = f"@{html.escape(message.from_user.username)}" if message.from_user.username else "Не указан"
-        full_name = html.escape(message.from_user.full_name or "Не указано")
-        user_text = html.escape(message.text)
-
-        phone = "Не указан в базе"
-        async with aiosqlite.connect(DB_NAME) as db:
-            async with db.execute("SELECT phone FROM users WHERE user_id = ?", (user_id,)) as cursor:
-                row = await cursor.fetchone()
-                if row and row[0]:
-                    phone = html.escape(str(row[0]))
-
-        admin_text = (
-            f"📩 <b>Новое обращение в поддержку!</b>\n\n"
-            f"👤 <b>От:</b> {full_name}\n"
-            f"🔗 <b>Username:</b> {username}\n"
-            f"📞 <b>Телефон:</b> <code>{phone}</code>\n"
-            f"🆔 <b>ID:</b> <code>{user_id}</code>\n\n"
-            f"💬 <b>Сообщение:</b>\n{user_text}"
+        await bot.send_photo(
+            ADMIN_ID,
+            photo=photo_file_id,
+            caption=admin_caption,
+            reply_markup=admin_kb,
+            parse_mode="HTML"
         )
-
-        reply_kb = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text="💬 Ответить анонимно", callback_data=f"support_reply_{user_id}")]
-            ]
-        )
-
-        await bot.send_message(ADMIN_ID, admin_text, reply_markup=reply_kb, parse_mode="HTML")
-        await message.answer("✅ Ваше сообщение успешно отправлено в службу поддержки! Ожидайте ответа.")
+        await message.answer("✅ Чек успешно отправлен администрации! Ожидайте зачисления средств.")
     except Exception as e:
-        logger.error(f"Не удалось отправить сообщение в поддержку админу: {e}")
-        await message.answer("⚠️ Не удалось связаться с поддержкой. Попробуйте позже.")
-    finally:
-        await state.clear()
+        logger.error(f"Не удалось отправить чек админу: {e}")
+        await message.answer("⚠️ Не удалось отправить чек. Попробуйте позже.")
 
 
-# 3. Нажатие админом кнопки «💬 Ответить анонимно»
-@router.callback_query(F.from_user.id == ADMIN_ID, F.data.startswith("support_reply_"))
-async def admin_start_reply_callback(callback: CallbackQuery, state: FSMContext) -> None:
+# 3. Админ нажал «✅ Подтвердить пополнение»
+@router.callback_query(F.from_user.id == ADMIN_ID, F.data.startswith("topup_accept_"))
+async def admin_accept_topup_callback(callback: CallbackQuery, state: FSMContext) -> None:
     target_user_id = int(callback.data.split("_")[2])
-    await state.update_data(reply_target_id=target_user_id)
-    await state.set_state(AdminReplyStates.waiting_for_reply_text)
+
+    await state.update_data(topup_target_id=target_user_id)
+    await state.set_state(AdminTopUpStates.waiting_for_amount)
+
     await callback.message.answer(
-        f"✍️ Напишите ответ для пользователя (ID: <code>{target_user_id}</code>).\n"
-        f"Ваше сообщение будет отправлено от имени бота:",
+        f"✍️ Введите сумму пополнения для пользователя (ID: <code>{target_user_id}</code>) цифрами:\n"
+        f"<i>Например: 30000</i>",
         parse_mode="HTML"
     )
     await callback.answer()
 
 
-# 4. Отправка ответа админа по состоянию (после нажатия кнопки)
-@router.message(F.from_user.id == ADMIN_ID, AdminReplyStates.waiting_for_reply_text, F.text)
-async def admin_send_button_reply(message: Message, state: FSMContext) -> None:
+# 4. Админ вводит сумму цифрами в чат
+@router.message(F.from_user.id == ADMIN_ID, AdminTopUpStates.waiting_for_amount, F.text)
+async def admin_enter_amount_handler(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
-    target_user_id = data.get("reply_target_id")
+    target_user_id = data.get("topup_target_id")
     await state.clear()
 
     if not target_user_id:
-        await message.reply("⚠️ Ошибка: ID получателя потерян. Нажмите кнопку «Ответить» ещё раз.")
+        await message.reply("⚠️ Ошибка: ID пользователя потерян. Нажмите кнопку подтверждения заново.")
         return
 
-    await _deliver_anonymous_support_reply(message, int(target_user_id), message.text)
-
-
-# 5. Запасной вариант: ответ администратора через обычный Reply на карточку
-@router.message(F.from_user.id == ADMIN_ID, F.reply_to_message, F.text)
-async def admin_reply_handler(message: Message) -> None:
-    reply_msg = message.reply_to_message
-    if not reply_msg or not reply_msg.text:
+    clean_text = message.text.replace(" ", "").replace(",", "")
+    if not clean_text.isdigit():
+        await message.reply("❌ Ошибка! Сумма должна состоять только из цифр (например: 30000). Попробуйте снова, нажав на кнопку под чеком.")
         return
 
-    match = re.search(r"🆔\s*ID:\s*(\d+)", reply_msg.text)
-    if not match:
-        return
+    amount = float(clean_text)
 
-    target_user_id = int(match.group(1))
-    await _deliver_anonymous_support_reply(message, target_user_id, message.text)
+    async with aiosqlite.connect(DB_NAME) as db:
+        await db.execute(
+            "UPDATE users SET balance = balance + ? WHERE user_id = ?",
+            (amount, target_user_id)
+        )
+        await db.commit()
+
+        async with db.execute("SELECT lang, balance FROM users WHERE user_id = ?", (target_user_id,)) as cursor:
+            user_row = await cursor.fetchone()
+
+    user_lang = user_row[0] if user_row and user_row[0] else "ru"
+    new_balance = user_row[1] if user_row and user_row[1] is not None else amount
+
+    success_texts = {
+        "ru": f"✅ <b>Ваш баланс успешно пополнен!</b>\n\n💳 Зачислено: <b>{amount:,.0f} сум</b>\n💰 Текущий баланс: <b>{new_balance:,.0f} сум</b>",
+        "uz": f"✅ <b>Hisobingiz muvaffaqiyatli to'ldirildi!</b>\n\n💳 Qo'shildi: <b>{amount:,.0f} so'm</b>\n💰 Joriy balans: <b>{new_balance:,.0f} so'm</b>",
+        "en": f"✅ <b>Your balance has been topped up!</b>\n\n💳 Added: <b>{amount:,.0f} UZS</b>\n💰 Current balance: <b>{new_balance:,.0f} UZS</b>"
+    }
+
+    try:
+        await bot.send_message(
+            target_user_id,
+            success_texts.get(user_lang, success_texts["ru"]),
+            parse_mode="HTML"
+        )
+    except Exception as e:
+        logger.error(f"Не удалось уведомить пользователя {target_user_id} о пополнении: {e}")
+
+    await message.reply(f"✅ Баланс пользователя <code>{target_user_id}</code> успешно пополнен на <b>{amount:,.0f} сум</b>!", parse_mode="HTML")
 
 
-async def _deliver_anonymous_support_reply(admin_msg: Message, target_user_id: int, raw_text: str) -> None:
-    safe_response = html.escape(raw_text)
+# 5. Админ нажал «❌ Отклонить»
+@router.callback_query(F.from_user.id == ADMIN_ID, F.data.startswith("topup_reject_"))
+async def admin_reject_topup_callback(callback: CallbackQuery) -> None:
+    target_user_id = int(callback.data.split("_")[2])
+
+    reject_texts = {
+        "ru": "❌ <b>К сожалению, ваш платеж был отклонен администрацией.</b>\nЕсли у вас есть вопросы, обратитесь в поддержку /help.",
+        "uz": "❌ <b>Afsuski, to'lovingiz ma'muriyat tomonidan rad etildi.</b>\nSavollar bo'lsa, /help orqali murojaat qiling.",
+        "en": "❌ <b>Unfortunately, your payment was rejected by administration.</b>\nIf you have questions, contact support via /help."
+    }
 
     async with aiosqlite.connect(DB_NAME) as db:
         async with db.execute("SELECT lang FROM users WHERE user_id = ?", (target_user_id,)) as cursor:
             row = await cursor.fetchone()
     user_lang = row[0] if row and row[0] else "ru"
 
-    headers = {
-        "ru": "🛠 <b>Ответ от службы поддержки Yo'ldosh Taxi:</b>",
-        "uz": "🛠 <b>Yo'ldosh Taxi qo'llab-quvvatlash xizmatidan javob:</b>",
-        "en": "🛠 <b>Response from Yo'ldosh Taxi Support:</b>"
-    }
-    header = headers.get(user_lang, headers["ru"])
-
     try:
-        await bot.send_message(
-            target_user_id,
-            f"{header}\n\n{safe_response}",
-            parse_mode="HTML"
+        await bot.send_message(target_user_id, reject_texts.get(user_lang, reject_texts["ru"]), parse_mode="HTML")
+        await callback.message.edit_caption(
+            caption=f"{callback.message.caption}\n\n❌ <b>СТАТУС: Отклонено администратором</b>",
+            parse_mode="HTML",
+            reply_markup=None
         )
-        await admin_msg.reply("✅ Ответ анонимно доставлен пользователю от имени бота!")
+        await callback.answer("Платеж отклонен.", show_alert=True)
     except Exception as e:
-        logger.error(f"Не удалось отправить ответ пользователю {target_user_id}: {e}")
-        await admin_msg.reply(f"⚠️ Не удалось отправить сообщение пользователю: {html.escape(str(e))}")
-
-# =====================================================================
-# 13. AIOHTTP СЕРВЕР ДЛЯ RENDER
-# =====================================================================
-
-async def handle_health_check(request: web.Request) -> web.Response:
-    return web.Response(text="Yo'ldosh Taxi Bot is running successfully!")
-
-
-async def start_web_server() -> web.AppRunner:
+        logger.error(f"Ошибка при отклонении платежа: {e}")
+        await callback.answer("⚠️ Ошибка при обработке.", show_alert=True)
     app = web.Application()
     app.router.add_get("/", handle_health_check)
     app.router.add_get("/health", handle_health_check)
