@@ -2073,17 +2073,16 @@ async def start_web_server() -> web.AppRunner:
     """Запуск фонового веб-сервера aiohttp для работы на Render."""
     app = web.Application()
     app.router.add_get("/", handle_ping)
-    app.router.add_head("/", handle_ping)
     
     runner = web.AppRunner(app)
     await runner.setup()
     
-    # Render автоматически передает порт через переменные окружения
-    port = int(os.environ.get("PORT", 8080))
+    # Render автоматически передает порт через переменные окружения (по умолчанию 10000)
+    port = int(os.environ.get("PORT", 10000))
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
     
-    logger.info(f"Веб-сервер успешно запущен на порту {port}")
+    logger.info(f"AIOHTTP веб-сервер запущен на порту {port}")
     return runner
 
 
