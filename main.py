@@ -2062,19 +2062,46 @@ async def admin_reject_topup_callback(callback: CallbackQuery) -> None:
 from aiogram.types import BotCommand
 
 # =====================================================================
-# 14. ЗАПУСК
+# 14. ЗАПУСК И ВЕБ-СЕРВЕР ДЛЯ RENDER
 # =====================================================================
+
+async def handle_ping(request: web.Request) -> web.Response:
+    """Простой обработчик для пингов UptimeRobot/Render, чтобы бот не засыпал."""
+    return web.Response(text="Yo'ldosh Taxi Bot is active and running!")
+
+async def start_web_server() -> web.AppRunner:
+    """Запуск фонового веб-сервера aiohttp для работы на Render."""
+    app = web.Application()
+    app.router.add_get("/", handle_ping)
+    app.router.add_head("/", handle_ping)
+    
+    runner = web.AppRunner(app)
+    await runner.setup()
+    
+    # Render автоматически передает порт через переменные окружения
+    port = int(os.environ.get("PORT", 8080))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    
+    logger.info(f"Веб-сервер успешно запущен на порту {port}")
+    return runner
+
 
 async def main() -> None:
     await init_db()
     
     # Регистрируем команды бота, чтобы они появлялись при вводе "/"
-    await bot.set_my_commands([
-        BotCommand(command="start", description="🚀 Запустить бота / Главное меню"),
-        BotCommand(command="help", description="❓ Помощь и инструкция"),
-    ])
+    try:
+        await bot.set_my_commands([
+            BotCommand(command="start", description="🚀 Запустить бота / Главное меню"),
+            BotCommand(command="help", description="❓ Помощь и инструкция"),
+        ])
+    except Exception as e:
+        logger.warning(f"Не удалось установить команды бота: {e}")
     
     dp.include_router(router)
+    
+    # Запускаем веб-сервер для Render и UptimeRobot
     runner = await start_web_server()
     
     logger.info("Запуск опроса Telegram API...")
