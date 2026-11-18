@@ -336,11 +336,14 @@ async def process_support_message(message: Message, state: FSMContext) -> None:
         user_text = html.escape(message.text)
 
         phone = "Не указан в базе"
-        async with aiosqlite.connect(DB_NAME) as db:
-            async with db.execute("SELECT phone FROM users WHERE user_id = ?", (user_id,)) as cursor:
-                row = await cursor.fetchone()
-                if row and row[0]:
-                    phone = html.escape(str(row[0]))
+        try:
+            async with aiosqlite.connect(DB_NAME) as db:
+                async with db.execute("SELECT phone FROM users WHERE user_id = ?", (user_id,)) as cursor:
+                    row = await cursor.fetchone()
+                    if row and row[0]:
+                        phone = html.escape(str(row[0]))
+        except Exception as db_err:
+            logger.warning(f"Не удалось получить телефон из БД для поддержки: {db_err}")
 
         admin_text = (
             f"📩 <b>Новое обращение в поддержку!</b>\n\n"
@@ -369,15 +372,19 @@ async def process_support_message(message: Message, state: FSMContext) -> None:
 
 @router.callback_query(F.from_user.id == ADMIN_ID, F.data.startswith("support_reply_"))
 async def admin_start_reply_callback(callback: CallbackQuery, state: FSMContext) -> None:
-    target_user_id = int(callback.data.split("_")[2])
-    await state.update_data(reply_target_id=target_user_id)
-    await state.set_state(AdminReplyStates.waiting_for_reply_text)
-    await callback.message.answer(
-        f"✍️ Напишите ответ для пользователя (ID: <code>{target_user_id}</code>).\n"
-        f"Ваше сообщение будет отправлено от имени бота:",
-        parse_mode="HTML"
-    )
-    await callback.answer()
+    try:
+        target_user_id = int(callback.data.split("_")[2])
+        await state.update_data(reply_target_id=target_user_id)
+        await state.set_state(AdminReplyStates.waiting_for_reply_text)
+        await callback.message.answer(
+            f"✍️ Напишите ответ для пользователя (ID: <code>{target_user_id}</code>).\n"
+            f"Ваше сообщение будет отправлено от имени бота:",
+            parse_mode="HTML"
+        )
+        await callback.answer()
+    except Exception as e:
+        logger.error(f"Ошибка в колбэке ответа поддержки: {e}")
+        await callback.answer("⚠️ Произошла ошибка.", show_alert=True)
 
 
 @router.message(F.from_user.id == ADMIN_ID, AdminReplyStates.waiting_for_reply_text, F.text)
@@ -391,11 +398,16 @@ async def admin_send_button_reply(message: Message, state: FSMContext) -> None:
         return
 
     safe_response = html.escape(message.text)
+    user_lang = "ru"
 
-    async with aiosqlite.connect(DB_NAME) as db:
-        async with db.execute("SELECT lang FROM users WHERE user_id = ?", (int(target_user_id),)) as cursor:
-            row = await cursor.fetchone()
-    user_lang = row[0] if row and row[0] else "ru"
+    try:
+        async with aiosqlite.connect(DB_NAME) as db:
+            async with db.execute("SELECT lang FROM users WHERE user_id = ?", (int(target_user_id),)) as cursor:
+                row = await cursor.fetchone()
+                if row and row[0]:
+                    user_lang = row[0]
+    except Exception as db_err:
+        logger.warning(f"Не удалось получить язык пользователя {target_user_id}: {db_err}")
 
     headers = {
         "ru": "🛠 <b>Ответ от службы поддержки Yo'ldosh Taxi:</b>",
@@ -413,7 +425,7 @@ async def admin_send_button_reply(message: Message, state: FSMContext) -> None:
         await message.reply("✅ Ответ анонимно доставлен пользователю от имени бота!")
     except Exception as e:
         logger.error(f"Не удалось отправить ответ пользователю {target_user_id}: {e}")
-        await message.reply(f"⚠️ Не удалось отправить сообщение пользователю: {html.escape(str(e))}")
+        await message.reply(f"⚠️ Не удалось отправить сообщение пользователю (возможно, он заблокировал бота).")
 
 
 # =====================================================================
@@ -1352,7 +1364,7 @@ async def driver_accept_order_handler(callback: CallbackQuery) -> None:
                 await callback.answer(not_verified_texts.get(lang, not_verified_texts["ru"]), show_alert=True)
                 return
 
-            # Проверяем статус заказа
+            # Проверяем статус заказа в базе данных
             async with db.execute("SELECT status, passenger_id, pickup, destination FROM orders WHERE order_id = ?", (order_id,)) as cursor:
                 row = await cursor.fetchone()
                 
@@ -1366,18 +1378,36 @@ async def driver_accept_order_handler(callback: CallbackQuery) -> None:
                 await callback.answer("❌ Этот заказ уже занят другим водителем или отменен!", show_alert=True)
                 return
                 
-            # Обновляем статус заказа
-            await db.execute(
-                "UPDATE orders SET driver_id = ?, status = 'accepted' WHERE order_id = ?",
+            # Обновляем статус с жесткой проверкой (защита от одновременного нажатия двумя водителями)
+            cursor = await db.execute(
+                "UPDATE orders SET driver_id = ?, status = 'accepted' WHERE order_id = ? AND status = 'pending'",
                 (driver_id, order_id)
             )
             await db.commit()
 
-        # 3. Полностью удаляем сообщение из канала, чтобы заказ исчез для остальных водителей
+            if cursor.rowcount == 0:
+                await callback.answer("❌ Этот заказ только что был принят другим водителем!", show_alert=True)
+                return
+
+        # 3. Безопасно обновляем сообщение в канале (меняем текст и убираем кнопки)
         try:
-            await callback.message.delete()
+            safe_driver_name = html.escape(first_name)
+            if callback.message.text:
+                await callback.message.edit_text(
+                    f"{callback.message.text}\n\n"
+                    f"❌ <b>СТАТУС: Заказ принят водителем {safe_driver_name}</b>",
+                    parse_mode="HTML",
+                    reply_markup=None
+                )
+            elif callback.message.caption:
+                await callback.message.edit_caption(
+                    caption=f"{callback.message.caption}\n\n"
+                    f"❌ <b>СТАТУС: Заказ принят водителем {safe_driver_name}</b>",
+                    parse_mode="HTML",
+                    reply_markup=None
+                )
         except Exception as e:
-            logger.error(f"Не удалось удалить сообщение из канала: {e}")
+            logger.error(f"Не удалось обновить статус заказа в канале: {e}")
 
         await callback.answer(f"✅ Вы успешно приняли заказ #{order_id}!", show_alert=True)
 
@@ -1415,7 +1445,6 @@ async def driver_accept_order_handler(callback: CallbackQuery) -> None:
     except Exception as e:
         logger.error(f"Ошибка в хендлере принятия заказа: {e}", exc_info=True)
         await callback.answer("⚠️ Произошла ошибка при принятии заказа. Попробуйте еще раз.", show_alert=True)
-
 
 @router.message(F.text.in_(["🏁 Завершить поездку", "🏁 Safarni yakunlash", "🏁 Complete Trip"]))
 async def driver_finish_trip_handler(message: Message, state: FSMContext) -> None:
@@ -1952,6 +1981,15 @@ async def admin_enter_amount_handler(message: Message, state: FSMContext) -> Non
 
     amount = float(clean_text)
 
+    # 🛑 ПРОВЕРКА НА МИНИМАЛЬНУЮ СУММУ ПОПОЛНЕНИЯ (5 000 сум)
+    if amount < 5000:
+        await message.reply(
+            "⚠️ <b>Минимальная сумма пополнения — 5 000 сум!</b>\n"
+            "Пожалуйста, введите корректную сумму заново, нажав на кнопку под чеком.",
+            parse_mode="HTML"
+        )
+        return
+
     async with aiosqlite.connect(DB_NAME) as db:
         await db.execute(
             "UPDATE users SET balance = balance + ? WHERE user_id = ?",
@@ -1981,7 +2019,6 @@ async def admin_enter_amount_handler(message: Message, state: FSMContext) -> Non
         logger.error(f"Не удалось уведомить пользователя {target_user_id} о пополнении: {e}")
 
     await message.reply(f"✅ Баланс пользователя <code>{target_user_id}</code> успешно пополнен на <b>{amount:,.0f} сум</b>!", parse_mode="HTML")
-
 
 # 5. Админ нажал «❌ Отклонить»
 @router.callback_query(F.from_user.id == ADMIN_ID, F.data.startswith("topup_reject_"))
